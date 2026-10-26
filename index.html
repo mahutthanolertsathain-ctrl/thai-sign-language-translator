@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7fb">
+  <title>เว็บไซต์แปลภาษามือแบบสองทิศทาง</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/web-static/styles.css">
+</head>
+<body>
+  <div id="welcome-gate" class="welcome-gate" role="dialog" aria-modal="true" aria-labelledby="welcome-title" aria-describedby="welcome-message">
+    <section class="welcome-card">
+      <div id="welcome-step-1" class="welcome-step">
+        <span class="eyebrow">ขั้นตอน 1 จาก 2 · โปรดอ่านก่อนใช้งาน</span>
+        <h1 id="welcome-title">เว็บไซต์แปลภาษามือยังอยู่ในขั้นต้นแบบ</h1>
+        <p id="welcome-message">เว็บไซต์ยังตรวจจับท่าภาษามือได้บางคำ ขณะนี้กำลังพัฒนาระบบจาก Local ให้รองรับการใช้งานผ่านเบราว์เซอร์และอุปกรณ์ที่หลากหลายยิ่งขึ้น จึงอาจมีท่าที่ตรวจจับได้น้อยกว่าเวอร์ชัน Local</p>
+        <button id="welcome-next" class="primary welcome-continue" type="button">ถัดไป →</button>
+      </div>
+      <div id="welcome-step-2" class="welcome-step" hidden>
+        <span class="eyebrow">ขั้นตอน 2 จาก 2 · อุปกรณ์ที่แนะนำ</span>
+        <h1 id="welcome-device-title">อุปกรณ์ที่แนะนำในขณะนี้</h1>
+        <p id="welcome-device-message">แนะนำให้ใช้ผ่านอุปกรณ์ที่มีกล้องและเปิดเว็บไซต์ด้วยเว็บเบราว์เซอร์ที่รองรับ</p>
+        <div class="welcome-devices" aria-label="อุปกรณ์ที่แนะนำ"><span>📱 iPad</span><span>💻 โน้ตบุ๊ก</span><span>🖥 คอมพิวเตอร์</span><span>📲 แท็บเล็ต</span></div>
+        <div class="welcome-actions"><button id="welcome-back" class="secondary" type="button">← ย้อนกลับ</button><button id="welcome-enter" class="primary" type="button">เข้าใช้งานเว็บไซต์</button></div>
+      </div>
+    </section>
+  </div>
+  <div id="system-guide" class="welcome-gate" role="dialog" aria-modal="true" aria-labelledby="system-guide-title" aria-describedby="system-guide-message" hidden>
+    <section class="welcome-card">
+      <span id="system-guide-kicker" class="eyebrow">วิธีใช้งานระบบ</span>
+      <h1 id="system-guide-title">วิธีใช้งาน</h1>
+      <p id="system-guide-message"></p>
+      <div class="welcome-actions"><button id="system-guide-back" class="secondary" type="button">← กลับ</button><button id="system-guide-enter" class="primary" type="button">เข้าใช้งานระบบนี้</button></div>
+    </section>
+  </div>
+  <main id="main-content" class="page" inert>
+    <header class="intro">
+      <div><span class="eyebrow">SIGN LANGUAGE · VOICE</span><h1>เว็บไซต์แปลภาษามือแบบสองทิศทาง</h1><p>เลือกใช้ระบบวิดีโอ หรือระบบจับท่าทางภาษามือ</p></div>
+      <span class="privacy">ทำงานบนเบราว์เซอร์</span>
+    </header>
+
+    <nav class="system-tabs" role="tablist" aria-label="เลือกระบบ">
+      <button id="video-tab" class="system-tab active" type="button" role="tab" aria-selected="true" aria-controls="video-system" data-system-target="video-system">🎞 ระบบวิดีโอภาษามือ</button>
+      <button id="gesture-tab" class="system-tab" type="button" role="tab" aria-selected="false" aria-controls="gesture-system" data-system-target="gesture-system">✋ ระบบจับท่าทางภาษามือ</button>
+    </nav>
+
+    <section id="video-system" class="system-panel" role="tabpanel" aria-labelledby="video-tab">
+      <header class="system-heading"><span class="eyebrow">VIDEO SYSTEM</span><h2>ค้นหาวิดีโอภาษามือ</h2><p>พิมพ์หรือพูดคำที่ต้องการ แล้วระบบจะแสดงคลิปที่ตรงกัน</p></header>
+      <div class="layout">
+        <div class="left-column">
+          <article class="card player-card">
+            <div class="card-heading"><div><span class="eyebrow">SIGN VIDEO</span><h2>วิดีโอภาษามือ</h2></div><span class="video-count" id="video-count">พร้อมใช้งาน</span></div>
+            <div class="player-wrap" id="player-wrap"><div class="empty-player"><span class="play-icon">▶</span><b>วิดีโอจะแสดงตรงนี้</b><span>ลองพิมพ์ “สวัสดี” แล้วกดส่ง</span></div><video id="sign-video" playsinline preload="metadata" hidden></video><button id="video-play-overlay" class="video-play-overlay" type="button" hidden>▶ แตะเพื่อเล่นคลิป</button><button id="video-expand-button" class="video-expand-button" type="button" aria-label="ขยายวิดีโอ" aria-pressed="false" hidden>⛶</button></div>
+            <div class="now-playing" id="now-playing">ยังไม่ได้เลือกคำ</div>
+            <div id="result-list" class="result-list" aria-live="polite"></div>
+          </article>
+        </div>
+        <div class="side-column">
+          <article class="card input-card">
+            <span class="eyebrow">VIDEO SEARCH</span><h2>พูดหรือพิมพ์ข้อความ</h2>
+            <div class="input-row"><input id="text-input" type="text" placeholder="เช่น สวัสดี, ฉันหิว" autocomplete="off"><button id="send-button" class="primary" type="button">ค้นหา</button></div>
+            <p class="vocabulary-help">ตัวอย่างการเรียงท่าประโยค: “ฉันรักแม่” → “แม่–ฉัน–รัก” (กรรม–ประธาน–กริยา)</p>
+            <button id="mic-button" class="mic-button" type="button"><span aria-hidden="true">🎙</span> แตะเพื่อพูด</button>
+            <p id="mic-transcript" class="mic-transcript" aria-live="polite" hidden></p>
+            <p id="status" class="status" role="status" aria-live="polite">พิมพ์ข้อความ หรือแตะปุ่มไมโครโฟนเพื่อค้นหาคลิป</p>
+            <label class="consent"><input id="mic-consent" type="checkbox"> อนุญาตใช้ไมโครโฟนเพื่อถอดเสียงผ่านบริการของเบราว์เซอร์</label>
+            <p class="mic-help">iPhone/iPad: เปิดลิงก์ด้วย Safari และเปิด Siri ในการตั้งค่า หากไมค์ยังเริ่มฟังไม่ได้</p>
+          </article>
+          <article class="card voice-card">
+            <div><span class="eyebrow">SPEECH</span><h2>เสียงพูด</h2></div>
+            <p>ทดสอบเสียงภาษาไทย</p>
+            <button id="speak-button" class="secondary" type="button">🔊 ทดสอบเสียง</button>
+          </article>
+        </div>
+      </div>
+      <details class="card vocabulary-card" open>
+        <summary><span>คำศัพท์และประโยคที่มีคลิปวิดีโอ</span><span id="vocabulary-count" class="video-count">กำลังโหลดรายการ…</span></summary>
+        <p class="vocabulary-help">แตะคำเพื่อเปิดคลิป หรือพิมพ์/พูดคำเหล่านี้ในช่องค้นหา</p>
+        <input id="vocabulary-filter" class="vocabulary-filter" type="search" placeholder="ค้นหาในรายการคำศัพท์และประโยค" aria-label="ค้นหาในรายการคำศัพท์และประโยค">
+        <div id="vocabulary-list" class="vocabulary-list" aria-live="polite"></div>
+      </details>
+    </section>
+
+    <section id="gesture-system" class="system-panel" role="tabpanel" aria-labelledby="gesture-tab" hidden>
+      <header class="system-heading"><span class="eyebrow">GESTURE SYSTEM</span><h2>จับท่าทางภาษามือ</h2><p>เปิดกล้องเพื่อแปลท่าที่รองรับเป็นเสียง และต่อคำเป็นประโยค</p></header>
+      <p class="gesture-use-guide"><strong>ก่อนเริ่มใช้:</strong> ตั้งกล้องให้เห็นใบหน้า มือ และลำตัวช่วงอกชัดเจน ขณะทำท่าให้ใช้มือข้างเดียวทีละท่า <strong>ยกเว้นท่า “รัก” ที่ระบบตรวจจับด้วยสองมือ</strong></p>
+      <div class="layout gesture-layout">
+        <div class="left-column">
+          <article class="card camera-card">
+            <div class="card-heading"><div><span class="eyebrow">CAMERA</span><h2>ตรวจจับท่าทาง</h2></div><span class="video-count" id="camera-status">ปิดกล้อง</span></div>
+            <div class="camera-wrap"><video id="camera-video" autoplay muted playsinline></video><div id="camera-placeholder" class="camera-placeholder">แตะ “เปิดกล้อง” เพื่อเริ่มแปล</div></div>
+            <div class="camera-controls"><button id="camera-start" class="primary" type="button">เปิดกล้อง</button><button id="camera-stop" class="secondary" type="button" hidden>ปิดกล้อง</button></div>
+            <p class="camera-note">ภาพประมวลผลบนอุปกรณ์และไม่ส่งออกไป; MediaPipe อาจส่งสถิติการใช้งานให้ Google</p>
+          </article>
+        </div>
+        <div class="side-column">
+          <article class="card gesture-output-card">
+            <span class="eyebrow">DETECTED SIGNS</span><h2>ท่าที่ตรวจพบแล้ว</h2>
+            <p id="gesture-status" class="status" role="status" aria-live="polite">เปิดกล้องเพื่อเริ่มตรวจท่าภาษามือ</p>
+            <div id="gesture-result-list" class="result-list" aria-live="polite"></div>
+            <button id="gesture-speaker-test" class="secondary gesture-speaker-test" type="button">🔊 กดทุกครั้งก่อนเริ่มใช้</button>
+            <button id="gesture-speak-button" class="secondary gesture-speak-button" type="button" hidden>🔊 พูดซ้ำ</button>
+          </article>
+          <article class="card notice-card">
+            <span class="eyebrow">SUPPORTED SIGNS</span><h2>คลิปตัวอย่างท่าที่ระบบรองรับ</h2>
+            <p class="note">แตะปุ่มเล่นเพื่อดูคลิปตัวอย่าง แตะปุ่มขยายเพื่อดูคลิปเต็มจอ</p>
+            <div class="gesture-clip-grid">
+              <article class="gesture-clip-card"><h3>ฉัน</h3><div class="gesture-clip-frame"><video class="gesture-reference-video" src="/web-static/videos/%E0%B8%89%E0%B8%B1%E0%B8%99.mp4" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างท่าฉัน"></video><button class="gesture-clip-play" type="button" aria-label="เล่นคลิปท่าฉัน">▶</button><button class="gesture-clip-expand" type="button" aria-label="ขยายคลิปท่าฉัน">⛶</button></div></article>
+              <article class="gesture-clip-card"><h3>พ่อ</h3><div class="gesture-clip-frame"><video class="gesture-reference-video" src="/web-static/videos/%E0%B8%9E%E0%B9%88%E0%B8%AD.mp4" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างท่าพ่อ"></video><button class="gesture-clip-play" type="button" aria-label="เล่นคลิปท่าพ่อ">▶</button><button class="gesture-clip-expand" type="button" aria-label="ขยายคลิปท่าพ่อ">⛶</button></div></article>
+              <article class="gesture-clip-card"><h3>โกรธ</h3><div class="gesture-clip-frame"><video class="gesture-reference-video" src="/web-static/videos/angry.mp4" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างท่าโกรธ"></video><button class="gesture-clip-play" type="button" aria-label="เล่นคลิปท่าโกรธ">▶</button><button class="gesture-clip-expand" type="button" aria-label="ขยายคลิปท่าโกรธ">⛶</button></div></article>
+              <article class="gesture-clip-card"><h3>รัก</h3><div class="gesture-clip-frame"><video class="gesture-reference-video" src="/web-static/videos/love.mp4" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างท่ารัก"></video><button class="gesture-clip-play" type="button" aria-label="เล่นคลิปท่ารัก">▶</button><button class="gesture-clip-expand" type="button" aria-label="ขยายคลิปท่ารัก">⛶</button></div></article>
+              <article class="gesture-clip-card"><h3>แม่</h3><div class="gesture-clip-frame"><video class="gesture-reference-video" src="/web-static/videos/%E0%B9%81%E0%B8%A1%E0%B9%88.mp4" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างท่าแม่"></video><button class="gesture-clip-play" type="button" aria-label="เล่นคลิปท่าแม่">▶</button><button class="gesture-clip-expand" type="button" aria-label="ขยายคลิปท่าแม่">⛶</button></div></article>
+              <article class="gesture-clip-card"><h3>ป่วย / ไม่สบาย</h3><div class="gesture-clip-frame"><video class="gesture-reference-video" src="/web-static/videos/%E0%B8%9B%E0%B9%88%E0%B8%A7%E0%B8%A2.mp4" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างท่าป่วย"></video><button class="gesture-clip-play" type="button" aria-label="เล่นคลิปท่าป่วย">▶</button><button class="gesture-clip-expand" type="button" aria-label="ขยายคลิปท่าป่วย">⛶</button></div></article>
+              <article class="gesture-clip-card"><h3>ช่วยฉันด้วย</h3><div class="gesture-clip-frame"><video class="gesture-reference-video" src="/web-static/videos/%E0%B8%8A%E0%B9%88%E0%B8%A7%E0%B8%A2%E0%B8%89%E0%B8%B1%E0%B8%99%E0%B8%94%E0%B9%89%E0%B8%A7%E0%B8%A2.mp4" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างท่าช่วยฉันด้วย"></video><button class="gesture-clip-play" type="button" aria-label="เล่นคลิปท่าช่วยฉันด้วย">▶</button><button class="gesture-clip-expand" type="button" aria-label="ขยายคลิปท่าช่วยฉันด้วย">⛶</button></div></article>
+            </div>
+            <p class="note">หลังตรวจพบท่าล่าสุด ระบบรอประมาณ 2.25 วินาทีก่อนพูด เพื่อให้มีเวลาต่อคำเป็นประโยค</p>
+          </article>
+        </div>
+      </div>
+    </section>
+    <footer>สำหรับโทรศัพท์และแท็บเล็ต ให้เปิดผ่าน HTTPS และอนุญาตไมโครโฟนเมื่อเบราว์เซอร์ถาม</footer>
+  </main>
+  <script src="/web-static/app.js" defer></script>
+  <script type="module" src="/web-static/camera.js"></script>
+</body>
+</html>

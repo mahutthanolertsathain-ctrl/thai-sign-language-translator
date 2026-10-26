@@ -1,0 +1,13 @@
+**/*.py
+app.py
+code main.py
+requirements.txt
+Dockerfile
+DEPLOY.md
+README.md
+video/
+__pycache__/
+.venv/
+.tools/
+templates/
+.git/

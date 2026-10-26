@@ -1,0 +1,7 @@
+.vercel/
+.venv/
+.tools/
+__pycache__/
+*.py[cod]
+video/
+vercel-site/
