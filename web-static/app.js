@@ -73,11 +73,25 @@ function showWelcomeStep(stepNumber) {
   el('welcome-step-2').hidden = firstStep;
   el('welcome-gate').setAttribute('aria-labelledby', firstStep ? 'welcome-title' : 'welcome-device-title');
   el('welcome-gate').setAttribute('aria-describedby', firstStep ? 'welcome-message' : 'welcome-device-message');
-  el(firstStep ? 'welcome-next' : 'welcome-enter').focus();
+  if (firstStep) el('welcome-next').focus();
+  else (document.querySelector('[data-recommended-device][aria-pressed="true"]') || document.querySelector('[data-recommended-device]'))?.focus();
 }
 el('welcome-next').addEventListener('click', () => showWelcomeStep(2));
 el('welcome-back').addEventListener('click', () => showWelcomeStep(1));
+document.querySelectorAll('[data-recommended-device]').forEach((deviceButton) => {
+  deviceButton.addEventListener('click', () => {
+    document.querySelectorAll('[data-recommended-device]').forEach((button) => {
+      const selected = button === deviceButton;
+      button.setAttribute('aria-pressed', String(selected));
+      button.classList.toggle('selected', selected);
+    });
+    el('welcome-device-selection').textContent = `เลือก${deviceButton.textContent.trim()}แล้ว กด “เข้าใช้งานเว็บไซต์” เพื่อไปต่อ`;
+    el('welcome-enter').disabled = false;
+    el('welcome-enter').focus();
+  });
+});
 el('welcome-enter').addEventListener('click', () => {
+  if (!document.querySelector('[data-recommended-device][aria-pressed="true"]')) return;
   el('welcome-gate').hidden = true;
   showSystemGuide('video-system', true);
 });

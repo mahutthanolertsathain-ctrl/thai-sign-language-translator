@@ -23,8 +23,14 @@
         <span class="eyebrow">ขั้นตอน 2 จาก 2 · อุปกรณ์ที่แนะนำ</span>
         <h1 id="welcome-device-title">อุปกรณ์ที่แนะนำในขณะนี้</h1>
         <p id="welcome-device-message">แนะนำให้ใช้ผ่านอุปกรณ์ที่มีกล้องและเปิดเว็บไซต์ด้วยเว็บเบราว์เซอร์ที่รองรับ</p>
-        <div class="welcome-devices" aria-label="อุปกรณ์ที่แนะนำ"><span>📱 iPad</span><span>💻 โน้ตบุ๊ก</span><span>🖥 คอมพิวเตอร์</span><span>📲 แท็บเล็ต</span></div>
-        <div class="welcome-actions"><button id="welcome-back" class="secondary" type="button">← ย้อนกลับ</button><button id="welcome-enter" class="primary" type="button">เข้าใช้งานเว็บไซต์</button></div>
+        <div class="welcome-devices" role="group" aria-label="เลือกอุปกรณ์ที่ใช้">
+          <button class="welcome-device" type="button" data-recommended-device="ipad" aria-pressed="false">📱 iPad</button>
+          <button class="welcome-device" type="button" data-recommended-device="laptop" aria-pressed="false">💻 โน้ตบุ๊ก</button>
+          <button class="welcome-device" type="button" data-recommended-device="computer" aria-pressed="false">🖥 คอมพิวเตอร์</button>
+          <button class="welcome-device" type="button" data-recommended-device="tablet" aria-pressed="false">📲 แท็บเล็ต</button>
+        </div>
+        <p id="welcome-device-selection" class="welcome-device-selection" aria-live="polite">กรุณาเลือกอุปกรณ์ที่กำลังใช้งาน</p>
+        <div class="welcome-actions"><button id="welcome-back" class="secondary" type="button">← ย้อนกลับ</button><button id="welcome-enter" class="primary" type="button" disabled>เข้าใช้งานเว็บไซต์</button></div>
       </div>
     </section>
   </div>
