@@ -70,6 +70,7 @@ function resetRecognitionState() {
     lastWord: '', lastWordAt: 0, prompt: 'กำลังตรวจจับท่าที่รองรับ'
   });
   state.cooldown.clear();
+  resetAddedSigns();
 }
 function resetSingleHandState() {
   state.meSince = state.meLastValid = 0;
@@ -77,6 +78,84 @@ function resetSingleHandState() {
   state.fatherStage = state.motherStage = 0;
   state.fatherSince = state.motherSince = 0;
   state.fatherFistSince = state.motherFistSince = 0;
+}
+
+// These two sequences follow the reference clips, using palm/face scale rather
+// than fixed pixel distances. Mirrored video can reverse handedness labels.
+const addedSigns = {
+  heSince: 0, heLastValid: 0, heStartOffset: 0, heMoved: false, heLatched: false,
+  hungryStage: 0, hungrySince: 0, hungryLastValid: 0, hungryLatched: false
+};
+function resetAddedSigns() {
+  Object.assign(addedSigns, { heSince: 0, heLastValid: 0, heStartOffset: 0, heMoved: false, heLatched: false,
+    hungryStage: 0, hungrySince: 0, hungryLastValid: 0, hungryLatched: false });
+}
+function handMetricDistance(a, b) {
+  const aspect = frameCanvas.width / frameCanvas.height;
+  return Math.hypot((a.x - b.x) * aspect, a.y - b.y);
+}
+function fingerBendAngle(points, tip) {
+  const aspect = frameCanvas.width / frameCanvas.height;
+  const base = points[tip - 3], joint = points[tip - 2], end = points[tip];
+  const vector = (p) => [(p.x - joint.x) * aspect, p.y - joint.y, (p.z - joint.z) * aspect];
+  const a = vector(base), b = vector(end);
+  const magnitude = Math.hypot(...a) * Math.hypot(...b);
+  if (magnitude < 1e-8) return 0;
+  return Math.acos(Math.max(-1, Math.min(1, a.reduce((sum, value, i) => sum + value * b[i], 0) / magnitude))) * 180 / Math.PI;
+}
+function detectHe(points, face, now) {
+  const aspect = frameCanvas.width / frameCanvas.height;
+  const palm = handMetricDistance(points[0], points[9]);
+  const faceWidth = Math.abs(face[234].x - face[454].x);
+  const offset = Math.abs(points[9].x - face[152].x) * aspect;
+  const angles = [8, 12, 16, 20].map((tip) => fingerBendAngle(points, tip));
+  const fourExtended = angles.slice(0, 3).every((angle) => angle > 140) && angles[3] > 130;
+  const fingersTogether = [8, 12, 16].every((tip) => handMetricDistance(points[tip], points[tip + 4]) < palm * .75);
+  const sideways = Math.abs(points[8].x - points[0].x) * aspect > palm * .45;
+  const belowFace = points[5].y > face[152].y + faceWidth * aspect * .25;
+  const pose = palm > .015 && faceWidth > .02 && fourExtended && fingersTogether && sideways && belowFace
+    && offset > faceWidth * aspect * .85;
+  if (!pose) {
+    if (now - addedSigns.heLastValid > 400) {
+      addedSigns.heSince = 0; addedSigns.heMoved = false; addedSigns.heLatched = false;
+    }
+    return false;
+  }
+  addedSigns.heLastValid = now;
+  if (!addedSigns.heSince) { addedSigns.heSince = now; addedSigns.heStartOffset = offset; }
+  if (offset - addedSigns.heStartOffset > palm * .22) addedSigns.heMoved = true;
+  if (!addedSigns.heLatched && addedSigns.heMoved && now - addedSigns.heSince >= 350) {
+    if (announce('เขา', now)) addedSigns.heLatched = true;
+  }
+  return true;
+}
+function detectHungry(points, face, now) {
+  const aspect = frameCanvas.width / frameCanvas.height;
+  const faceWidth = Math.abs(face[234].x - face[454].x);
+  const faceScale = faceWidth * aspect;
+  const neckOffset = points[5].y - face[152].y;
+  const atNeck = faceWidth > .02 && neckOffset > -faceScale * .15 && neckOffset < faceScale * .95
+    && Math.abs(points[5].x - face[152].x) < faceWidth * .85;
+  const threeFolded = [12, 16, 20].every((tip) => fingerBendAngle(points, tip) < 125);
+  if (!atNeck || !threeFolded) {
+    if (now - addedSigns.hungryLastValid > 400) {
+      addedSigns.hungryStage = 0; addedSigns.hungryLatched = false;
+    }
+    return false;
+  }
+  addedSigns.hungryLastValid = now;
+  if (addedSigns.hungryLatched) return true;
+  const indexAngle = fingerBendAngle(points, 8);
+  if (addedSigns.hungryStage && now - addedSigns.hungrySince > 2000) addedSigns.hungryStage = 0;
+  if (indexAngle > 155) {
+    if (!addedSigns.hungryStage) { addedSigns.hungryStage = 1; addedSigns.hungrySince = now; }
+    return true;
+  }
+  if (addedSigns.hungryStage === 1 && indexAngle < 100 && now - addedSigns.hungrySince >= 120) {
+    if (announce('หิว', now)) { addedSigns.hungryLatched = true; addedSigns.hungryStage = 0; }
+    return true;
+  }
+  return addedSigns.hungryStage > 0;
 }
 
 function detectMe(points, face, now) {
@@ -277,9 +356,11 @@ function recognizeSigns(handsResult, faceResult, now) {
 
   if (hands.length === 1 && face) {
     const points = hands[0];
-    detectMe(points, face, now);
-    detectParents(points, face, now);
-  } else resetSingleHandState();
+    const hungryActive = detectHungry(points, face, now);
+    const heActive = detectHe(points, face, now);
+    if (hungryActive || heActive) resetSingleHandState();
+    else { detectMe(points, face, now); detectParents(points, face, now); }
+  } else { resetSingleHandState(); resetAddedSigns(); }
 
   detectAngry(hands, face, now);
   detectSick(hands, handsResult, face, now);
@@ -290,6 +371,8 @@ function recognizeSigns(handsResult, faceResult, now) {
   const sosActive = detectHelpSOS(hands, now);
 
   if (state.lastWord && now - state.lastWordAt < 1500) state.prompt = `ตรวจพบ: ${state.lastWord}`;
+  else if (addedSigns.hungryStage > 0) state.prompt = 'ท่าหิว: งอนิ้วชี้เข้าบริเวณลำคอ';
+  else if (addedSigns.heSince && !addedSigns.heLatched && now - addedSigns.heLastValid <= 400) state.prompt = 'ท่าเขา: ยื่นมือออกด้านข้างเล็กน้อย';
   else if (state.sickStage > 0) state.prompt = 'ท่าป่วย: ขยับหลังมือชิดหน้าผากแล้วค้าง';
   else if (hands.length) {
     if (!sosActive) state.prompt = 'พบมือ กำลังตรวจจับท่าที่รองรับ';
