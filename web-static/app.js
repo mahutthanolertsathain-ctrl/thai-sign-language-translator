@@ -18,6 +18,11 @@ let activeSpeech = null;
 let speechWatchdogTimer = null;
 let thaiSpeechVoice = null;
 let latestGestureSentence = '';
+let practiceMode = false;
+let pendingPractice = false;
+let practiceComplete = false;
+let practiceCameraReady = false;
+const practicedWords = new Set();
 
 const el = (id) => document.getElementById(id);
 const normalize = (value) => (value || '').toLocaleLowerCase('th').replace(/[\sๆฯ,.!?…]/g, '');
@@ -35,7 +40,7 @@ const systemGuides = {
   },
 };
 function showSystemGuide(systemId, isInitial = false) {
-  const guide = systemGuides[systemId];
+  const guide = pendingPractice && systemId === 'gesture-system' ? { title: 'วิธีใช้โหมดฝึกทีละคำ', message: 'เลือกคำที่ต้องการฝึก แล้วกดดูคลิปตัวอย่าง จากนั้นกด “เปิดกล้อง” ลดมือให้พ้นภาพสักครู่ก่อนเริ่มทำท่า เมื่อระบบตรวจพบคำที่เลือกจะแสดงว่าฝึกสำเร็จ กดฝึกซ้ำหรือไปคำถัดไปได้ โดยโหมดนี้จะไม่ต่อคำเป็นประโยค' } : systemGuides[systemId];
   if (!guide) return;
   pendingSystemId = systemId;
   el('system-guide-title').textContent = guide.title;
@@ -47,6 +52,7 @@ function showSystemGuide(systemId, isInitial = false) {
   el('system-guide-enter').focus();
 }
 function activateSystem(systemId) {
+  if (systemId !== 'gesture-system' && practiceMode) setPracticeMode(false);
   document.body.classList.remove('home-view');
   document.querySelectorAll('[data-system-target]').forEach((item) => {
     const selected = item.dataset.systemTarget === systemId;
@@ -105,7 +111,7 @@ el('system-guide-back').addEventListener('click', () => {
   document.body.classList.remove('welcome-open');
   el('main-content').inert = false;
   document.querySelector('[data-system-target].active')?.focus();
-  pendingSystemId = null;
+  pendingSystemId = null; pendingPractice = false;
 });
 el('system-guide-enter').addEventListener('click', () => {
   const systemId = pendingSystemId;
@@ -114,7 +120,12 @@ el('system-guide-enter').addEventListener('click', () => {
   el('main-content').inert = false;
   pendingSystemId = null;
   if (systemId) activateSystem(systemId);
-  document.querySelector(`[data-system-target="${systemId}"]`)?.focus();
+  if (pendingPractice && systemId === 'gesture-system') setPracticeMode(true);
+  pendingPractice = false;
+  if (practiceMode && systemId === 'gesture-system') {
+    el('practice-word').focus({ preventScroll: true });
+    document.querySelector('.gesture-mode-switch').scrollIntoView({ block: 'start', behavior: 'auto' });
+  } else document.querySelector(`[data-system-target="${systemId}"]`)?.focus();
 });
 
 function refreshThaiSpeechVoice() {
@@ -261,6 +272,10 @@ function submitText(text = el('text-input').value, { keepInput = false } = {}) {
 }
 
 function handleSignDetected(word) {
+  if (practiceMode) {
+    if (!practiceComplete && word === el('practice-word').value) completePractice();
+    return;
+  }
   const isNewWord = signSentenceBuffer[signSentenceBuffer.length - 1] !== word;
   if (!isNewWord) return;
   signSentenceBuffer.push(word);
@@ -679,7 +694,7 @@ window.addEventListener('keydown', (event) => {
 });
 window.addEventListener('sign-detected', (event) => handleSignDetected(event.detail.word));
 document.querySelectorAll('[data-system-target]').forEach((tab) => {
-  tab.addEventListener('click', () => showSystemGuide(tab.dataset.systemTarget));
+  tab.addEventListener('click', () => { pendingPractice = false; showSystemGuide(tab.dataset.systemTarget); });
 });
 loadVocabulary().catch(() => { el('video-count').textContent = 'โหลดรายการคลิปไม่สำเร็จ'; el('status').textContent = 'โหลดข้อมูลวิดีโอไม่สำเร็จ กรุณารีเฟรชหน้า'; });
 
@@ -704,6 +719,7 @@ motionQuery.addEventListener('change', (event) => {
   if (motionPreference === null) setReducedMotion(event.matches);
 });
 function goHome(event) {
+  if (practiceMode) setPracticeMode(false);
   event?.preventDefault();
   document.body.classList.add('home-view');
   el('sign-video').pause();
@@ -746,3 +762,93 @@ function startSentenceCountdown() {
   update();
   sentenceCountdown = setInterval(update, 100);
 }
+
+const practiceLessons = [...document.querySelectorAll('.gesture-clip-grid .gesture-clip-card')].map((card) => {
+  const label = card.querySelector('h3').textContent.trim();
+  return { word: label.includes('ไม่สบาย') ? 'ไม่สบาย' : label, label, src: card.querySelector('video').getAttribute('src') };
+});
+practiceLessons.forEach((lesson) => {
+  const option = document.createElement('option'); option.value = lesson.word; option.textContent = lesson.label;
+  el('practice-word').append(option);
+});
+function practiceResult(title, message, state = 'waiting') {
+  el('practice-result-title').textContent = title;
+  el('practice-result-message').textContent = message;
+  el('practice-result').dataset.state = state;
+}
+function resetPracticeAttempt() {
+  practiceComplete = false;
+  el('practice-retry').hidden = true;
+  window.dispatchEvent(new CustomEvent('practice-settings-changed', { detail: { active: practiceMode, word: el('practice-word').value } }));
+  practiceResult(practiceCameraReady ? 'เตรียมเริ่มท่าใหม่' : 'เปิดกล้องเพื่อเริ่มฝึก', practiceCameraReady
+    ? 'ลดมือให้พ้นภาพสักครู่ แล้วทำท่าตามคลิปตัวอย่าง' : 'ดูคลิปตัวอย่างก่อน จากนั้นกด “เปิดกล้อง”');
+}
+function updatePracticeLesson() {
+  const lesson = practiceLessons.find((item) => item.word === el('practice-word').value);
+  if (!lesson) return;
+  const video = el('practice-video'); video.pause(); video.src = lesson.src; video.load();
+  video.setAttribute('aria-label', `คลิปตัวอย่างท่า${lesson.label}`);
+  document.querySelector('.camera-card h2').textContent = practiceMode ? `ฝึกท่า “${lesson.label}”` : 'ตรวจจับท่าทาง';
+  resetPracticeAttempt();
+}
+function setPracticeMode(active) {
+  practiceMode = active;
+  document.getElementById('gesture-system').classList.toggle('practicing', active);
+  el('practice-card').hidden = !active;
+  document.querySelector('.gesture-output-card').hidden = active;
+  document.querySelector('.supported-guide').hidden = active;
+  for (const [id, selected] of [['translation-mode', !active], ['practice-mode', active]]) {
+    el(id).classList.toggle('active', selected); el(id).setAttribute('aria-pressed', String(selected));
+  }
+  if (signSentenceTimer) clearTimeout(signSentenceTimer);
+  signSentenceTimer = null; signSentenceBuffer = []; stopSentenceCountdown();
+  el('gesture-result-list').replaceChildren();
+  el('gesture-status').textContent = 'เปิดกล้องแล้วทำท่าที่รองรับเพื่อต่อคำเป็นประโยค';
+  el('gesture-live-caption').hidden = true;
+  if (activeSpeech || speechQueue.length) {
+    clearSpeechWatchdog(); speechQueue = []; activeSpeech = null;
+    window.speechSynthesis?.cancel();
+  }
+  pauseGestureReferenceVideos();
+  if (active) {
+    updatePracticeLesson();
+    document.querySelector('.gesture-mode-switch').scrollIntoView({ block: 'start', behavior: 'auto' });
+  }
+  else { el('practice-video').pause(); document.querySelector('.camera-card h2').textContent = 'ตรวจจับท่าทาง'; resetPracticeAttempt(); }
+}
+function completePractice() {
+  practiceComplete = true;
+  const word = el('practice-word').value;
+  const label = practiceLessons.find((lesson) => lesson.word === word)?.label || word;
+  practicedWords.add(word);
+  practiceResult(`✓ ตรวจพบท่า “${label}” แล้ว`, 'ฝึกคำนี้อีกครั้ง หรือเลือกคำถัดไปได้เลย', 'success');
+  el('practice-retry').hidden = false;
+  el('practice-progress').textContent = `ฝึกสำเร็จในรอบนี้ ${practicedWords.size} / ${practiceLessons.length} คำ`;
+  el('gesture-live-caption').textContent = `✓ ${label}`; el('gesture-live-caption').hidden = false;
+}
+el('practice-home').addEventListener('click', () => { pendingPractice = true; showSystemGuide('gesture-system'); });
+el('practice-mode').addEventListener('click', () => setPracticeMode(true));
+el('translation-mode').addEventListener('click', () => setPracticeMode(false));
+el('practice-word').addEventListener('change', updatePracticeLesson);
+el('practice-retry').addEventListener('click', resetPracticeAttempt);
+el('practice-next').addEventListener('click', () => {
+  el('practice-word').selectedIndex = (el('practice-word').selectedIndex + 1) % practiceLessons.length;
+  updatePracticeLesson(); el('practice-word').focus();
+});
+el('practice-play').addEventListener('click', () => {
+  const video = el('practice-video');
+  if (!video.paused) video.pause();
+  else video.play().catch(() => practiceResult('ยังเล่นคลิปไม่ได้', 'ลองกดดูคลิปอีกครั้ง หรือเลือกคำใหม่'));
+});
+el('practice-video').addEventListener('play', () => { el('practice-play').textContent = 'Ⅱ หยุดคลิปตัวอย่าง'; });
+el('practice-video').addEventListener('pause', () => { el('practice-play').textContent = '▶ ดูคลิปตัวอย่าง'; });
+el('practice-video').addEventListener('error', () => { if (practiceMode) practiceResult('โหลดคลิปไม่ได้', 'ตรวจการเชื่อมต่อแล้วลองเลือกคำอีกครั้ง'); });
+window.addEventListener('practice-ready', () => {
+  if (practiceMode && !practiceComplete) practiceResult(`กำลังรอท่า “${el('practice-word').selectedOptions[0].textContent}”`, 'ทำท่าตามคลิป โดยให้กล้องเห็นใบหน้าและมือชัดเจน');
+});
+window.addEventListener('camera-state-changed', (event) => {
+  practiceCameraReady = event.detail.state === 'ready';
+  if (practiceMode && !practiceComplete && !practiceCameraReady) practiceResult('ยังไม่ได้เปิดกล้อง', 'กด “เปิดกล้อง” เพื่อเริ่มฝึกคำที่เลือก');
+});
+updatePracticeLesson();
+el('practice-progress').textContent = `ฝึกสำเร็จในรอบนี้ 0 / ${practiceLessons.length} คำ`;

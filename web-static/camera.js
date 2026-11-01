@@ -41,12 +41,20 @@ const SICK_FOREHEAD_DISTANCE = 0.12;
 
 function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function up(points, tip, pip) { return points[tip].y < points[pip].y; }
+const practice = { active: document.getElementById('gesture-system').classList.contains('practicing'), word: document.getElementById('practice-word').value, matched: false, awaitNeutral: document.getElementById('gesture-system').classList.contains('practicing'), neutralSince: null };
+window.addEventListener('practice-settings-changed', (event) => {
+  practice.active = Boolean(event.detail.active); practice.word = event.detail.word || '';
+  practice.matched = false; practice.awaitNeutral = practice.active; practice.neutralSince = null;
+  resetRecognitionState();
+});
 function announce(word, now, minimumInterval = 2200) {
+  if (practice.active && (practice.matched || practice.awaitNeutral || word !== practice.word)) return false;
   const last = state.cooldown.get(word);
   if (last !== undefined && now - last < minimumInterval) return false;
   state.cooldown.set(word, now);
   state.lastWord = word;
   state.lastWordAt = now;
+  if (practice.active) practice.matched = true;
   window.dispatchEvent(new CustomEvent('sign-detected', { detail: { word } }));
   badge.textContent = `ตรวจพบ: ${word}`;
   return true;
@@ -468,6 +476,17 @@ function detectHelpSOS(hands, now) {
 function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
   const hands = handsResult.landmarks || [];
   const face = (faceResult.faceLandmarks || [])[0];
+  if (practice.active && practice.awaitNeutral) {
+    if (!hands.length) {
+      practice.neutralSince ??= now;
+      if (now - practice.neutralSince >= 450) {
+        practice.awaitNeutral = false; resetRecognitionState();
+        window.dispatchEvent(new CustomEvent('practice-ready'));
+      }
+    } else practice.neutralSince = null;
+    return 'โหมดฝึก: ลดมือให้พ้นภาพสักครู่ก่อนเริ่มท่าใหม่';
+  }
+  if (practice.active && practice.matched) return 'ฝึกสำเร็จแล้ว · กดฝึกอีกครั้งหรือเลือกคำถัดไป';
 
   const arms = chestArms(poseResult?.landmarks?.[0]);
   const helloActive = detectHello(hands, face, now);
@@ -502,6 +521,11 @@ function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
   else if (hands.length) {
     if (!sosActive) state.prompt = 'พบมือ กำลังตรวจจับท่าที่รองรับ';
   } else state.prompt = 'กำลังตรวจจับท่าที่รองรับ';
+  if (practice.active) {
+    if (practice.matched) return `ตรวจพบท่า “${practice.word}” แล้ว · ฝึกสำเร็จ`;
+    const holdingMe = practice.word === 'ฉัน' && state.meSince && !state.meLatched;
+    return holdingMe ? state.prompt : `กำลังฝึกคำ “${practice.word}” · ทำท่าตามคลิปตัวอย่าง`;
+  }
   return state.prompt;
 }
 
@@ -596,6 +620,7 @@ async function startCamera() {
     startButton.hidden = true; stopButton.hidden = false;
     badge.textContent = 'กำลังตรวจจับท่าที่รองรับ';
     cameraWrap.dataset.cameraState = 'ready';
+    window.dispatchEvent(new CustomEvent('camera-state-changed', { detail: { state: 'ready' } }));
     lastInferenceAt = 0; lastVideoTime = -1;
     loopId = requestAnimationFrame(inferFrame);
   } catch (error) {
@@ -603,6 +628,7 @@ async function startCamera() {
     startButton.disabled = false;
     badge.textContent = 'เปิดกล้องไม่ได้';
     cameraWrap.dataset.cameraState = 'error';
+    window.dispatchEvent(new CustomEvent('camera-state-changed', { detail: { state: 'error' } }));
     placeholder.hidden = false;
     placeholder.textContent = error?.name === 'NotAllowedError' ? 'กรุณาอนุญาตใช้กล้องในเบราว์เซอร์' : 'เปิดกล้องหรือโหลดตัวตรวจจับไม่สำเร็จ';
   }
@@ -610,6 +636,8 @@ async function startCamera() {
 
 function stopCamera() {
   cameraWrap.dataset.cameraState = 'off';
+  if (practice.active) { practice.awaitNeutral = true; practice.neutralSince = null; }
+  window.dispatchEvent(new CustomEvent('camera-state-changed', { detail: { state: 'off' } }));
   document.getElementById('gesture-live-caption').hidden = true;
   cancelAnimationFrame(loopId);
   stream?.getTracks().forEach((track) => track.stop()); stream = null;

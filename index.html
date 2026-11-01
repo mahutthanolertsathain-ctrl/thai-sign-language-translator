@@ -57,6 +57,7 @@
       <button id="video-tab" class="system-tab" type="button" role="tab" aria-selected="false" aria-controls="video-system" data-system-target="video-system"><span class="mode-icon" aria-hidden="true">▶</span><span class="mode-copy"><strong>พูดหรือพิมพ์ → ดูภาษามือ</strong><small>ค้นหาคำศัพท์และดูคลิปตัวอย่างภาษามือ</small></span><span class="mode-arrow" aria-hidden="true">↗</span></button>
       <button id="gesture-tab" class="system-tab" type="button" role="tab" aria-selected="false" aria-controls="gesture-system" data-system-target="gesture-system"><span class="mode-icon" aria-hidden="true">✋</span><span class="mode-copy"><strong>ทำท่า → ฟังเสียงพูด</strong><small>เปิดกล้อง แปลท่าที่รองรับ และต่อเป็นประโยค</small></span><span class="mode-arrow" aria-hidden="true">↗</span></button>
     </nav>
+    <button id="practice-home" class="practice-home" type="button"><span class="mode-icon" aria-hidden="true">◎</span><span><strong>ฝึกภาษามือทีละคำ</strong><small>ดูตัวอย่าง แล้วลองทำตามให้ระบบตรวจจับ</small></span><span class="mode-arrow" aria-hidden="true">↗</span></button>
     <section id="video-system" class="system-panel" role="tabpanel" aria-labelledby="video-tab">
       <header class="system-heading"><span class="eyebrow">VIDEO SYSTEM</span><h2>ค้นหาวิดีโอภาษามือ</h2><p>พิมพ์หรือพูดคำที่ต้องการ แล้วระบบจะแสดงคลิปที่ตรงกัน</p></header>
       <div class="layout">
@@ -97,6 +98,7 @@
 
     <section id="gesture-system" class="system-panel" role="tabpanel" aria-labelledby="gesture-tab" hidden>
       <header class="system-heading"><span class="eyebrow">GESTURE SYSTEM</span><h2>จับท่าทางภาษามือ</h2><p>เปิดกล้องเพื่อแปลท่าที่รองรับเป็นเสียง และต่อคำเป็นประโยค</p></header>
+      <div class="gesture-mode-switch" role="group" aria-label="เลือกโหมดจับท่าทาง"><button id="translation-mode" class="active" type="button" aria-pressed="true">แปลเป็นประโยค</button><button id="practice-mode" type="button" aria-pressed="false">◎ ฝึกทีละคำ</button></div>
       <p class="gesture-use-guide"><strong>ก่อนเริ่มใช้:</strong> ตั้งกล้องให้เห็นใบหน้า มือ และลำตัวช่วงอกชัดเจน ขณะทำท่าให้ใช้มือข้างเดียวทีละท่า <strong>ยกเว้นท่า “รัก” และ “สวัสดี” ที่ใช้สองมือของผู้ทำท่าคนเดียวกัน</strong></p>
       <div class="layout gesture-layout">
         <div class="left-column">
@@ -114,6 +116,15 @@
           </article>
         </div>
         <div class="side-column">
+          <article id="practice-card" class="card practice-card" hidden>
+            <span class="eyebrow">PRACTICE ONE SIGN</span><h2>ดูตัวอย่าง แล้วลองทำตาม</h2>
+            <label for="practice-word">เลือกคำที่ต้องการฝึก</label><select id="practice-word"></select>
+            <div class="practice-example"><video id="practice-video" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างคำที่กำลังฝึก"></video><button id="practice-play" type="button" class="secondary">▶ ดูคลิปตัวอย่าง</button></div>
+            <div id="practice-result" class="practice-result" data-state="waiting"><strong id="practice-result-title">เปิดกล้องเพื่อเริ่มฝึก</strong><p id="practice-result-message">ดูคลิปตัวอย่างก่อน จากนั้นกด “เปิดกล้อง”</p></div>
+            <div class="practice-actions"><button id="practice-retry" type="button" class="secondary" hidden>ฝึกคำนี้อีกครั้ง</button><button id="practice-next" type="button" class="primary">คำถัดไป →</button></div>
+            <p id="practice-progress" class="practice-progress" aria-live="polite">ฝึกสำเร็จในรอบนี้ 0 คำ</p>
+            <p class="practice-note">โหมดนี้ตรวจเฉพาะคำที่เลือกและไม่ต่อคำเป็นประโยค ผลสำเร็จหมายถึงระบบตรวจพบท่าที่เลือกจากกล้อง</p>
+          </article>
           <article class="card gesture-output-card">
             <span class="eyebrow">DETECTED SIGNS</span><h2>ท่าที่ตรวจพบแล้ว</h2>
             <p id="gesture-status" class="status" role="status" aria-live="polite">เปิดกล้องเพื่อเริ่มตรวจท่าภาษามือ</p>
