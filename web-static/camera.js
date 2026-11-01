@@ -1,4 +1,4 @@
-import { FilesetResolver, FaceLandmarker, HandLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.0';
+import { FilesetResolver, FaceLandmarker, HandLandmarker, PoseLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.0';
 
 const camera = document.getElementById('camera-video');
 const cameraWrap = camera.closest('.camera-wrap');
@@ -11,6 +11,9 @@ const frameContext = frameCanvas.getContext('2d', { willReadFrequently: false })
 let stream = null;
 let handTask = null;
 let faceTask = null;
+let poseTask = null;
+let lastPoseResult = null;
+let lastPoseAt = -Infinity;
 let loopId = 0;
 let lastInferenceAt = 0;
 let lastVideoTime = -1;
@@ -24,6 +27,7 @@ const state = {
   lastWord: '', lastWordAt: 0, prompt: 'กำลังตรวจจับท่าที่รองรับ', cooldown: new Map()
 };
 const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
 const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 const ANGRY_TOUCH_THRESHOLD = 0.12;
 const ANGRY_PULL_THRESHOLD = 0.15;
@@ -72,6 +76,9 @@ function resetRecognitionState() {
   state.cooldown.clear();
   resetAddedSigns();
   resetHelloState();
+  loveHold.latched = false; loveHold.lastValid = 0;
+  sickHold.latched = false; sickHold.lastValid = 0;
+  lastSingleAt = 0;
 }
 function resetSingleHandState() {
   state.meSince = state.meLastValid = 0;
@@ -212,11 +219,30 @@ function detectHello(hands, face, now) {
   return Boolean(valid || helloState.since && now - helloState.lastValid <= 600);
 }
 
-function detectMe(points, face, now) {
+const loveHold = { latched: false, lastValid: 0 };
+const sickHold = { latched: false, lastValid: 0 };
+let lastSingleAt = 0;
+function chestArms(pose) {
+  if (!pose || [11, 12, 15, 16].some((i) => (pose[i].visibility ?? 0) < .5)) return null;
+  const aspect = frameCanvas.width / frameCanvas.height;
+  const width = Math.abs(pose[11].x - pose[12].x);
+  const height = width * aspect;
+  if (width < .08) return null;
+  const center = { x: (pose[11].x + pose[12].x) / 2, y: (pose[11].y + pose[12].y) / 2 };
+  const wrists = [pose[15], pose[16]];
+  const raised = wrists.map((w) => Math.abs(w.x - center.x) < width * .75 && w.y > center.y - height * .25 && w.y < center.y + height * .67);
+  const down = wrists.map((w) => w.y > center.y + height * .88);
+  return { width, height, center, wrists, bothRaised: raised.every(Boolean),
+    singleRaised: raised[0] && down[1] ? wrists[0] : raised[1] && down[0] ? wrists[1] : null };
+}
+
+function detectMe(points, face, now, arms) {
   const chin = face[152];
   const fingersExtended = [8, 12, 16, 20].every((tip) => distance(points[tip], points[tip - 2]) > 0.02);
   const fingertipsTogether = distance(points[8], points[12]) < 0.08 && distance(points[12], points[16]) < 0.08 && distance(points[16], points[20]) < 0.08;
-  const pose = fingersExtended && fingertipsTogether && points[9].y > chin.y + 0.02 && Math.abs(points[0].x - chin.x) < 0.25;
+  const pose = Boolean(arms?.singleRaised) && handMetricDistance(points[0], arms.singleRaised) < arms.height * .55
+    && fingersExtended && fingertipsTogether && points[9].y > chin.y + 0.02
+    && Math.abs(points[9].x - chin.x) < Math.abs(face[234].x - face[454].x) * .95;
   if (pose) {
     state.meLastValid = now;
     if (!state.meLatched) {
@@ -266,6 +292,12 @@ function detectAngry(hands, face, now) {
 }
 
 function detectSick(hands, handsResult, face, now) {
+  if (sickHold.latched) {
+    const holding = face && hands.length && distance(hands[0][9], face[10]) < .18;
+    if (holding) { sickHold.lastValid = now; return true; }
+    if (now - sickHold.lastValid <= 600) return false;
+    sickHold.latched = false;
+  }
   if (!hands.length || !face) {
     if (state.sickStage === 1 && state.sickLastValid && now - state.sickLastValid <= SICK_TRACKING_GRACE_MS) return true;
     state.sickStage = 0;
@@ -303,6 +335,7 @@ function detectSick(hands, handsResult, face, now) {
   } else if (foreheadDistance < SICK_FOREHEAD_DISTANCE) {
     state.sickHoldSince = state.sickHoldSince || now;
     if (now - state.sickHoldSince >= SICK_HOLD_MS && announce('ไม่สบาย', now, SICK_COOLDOWN_MS)) {
+      sickHold.latched = true; sickHold.lastValid = now;
       state.sickStage = 0;
       state.sickSince = 0;
       state.sickHoldSince = 0;
@@ -341,24 +374,32 @@ function detectParents(points, face, now) {
   return thumbAtCheek && (fatherPose || motherPose) || state.fatherStage > 0 || state.motherStage > 0;
 }
 
-function detectLove(hands, result, face, now) {
-  if (hands.length !== 2 || !face) { state.loveSince = 0; return false; }
-  const labels = [handLabel(result, 0), handLabel(result, 1)];
-  const right = labels.indexOf('Right'), left = labels.indexOf('Left');
-  const [first, second] = hands;
-  const chinY = face[152].y;
-  const onChest = first[0].y > chinY && second[0].y > chinY;
-  const wristGap = distance(first[0], second[0]);
-  const wristOrder = first[0].x - second[0].x;
-  const knuckleOrder = first[9].x - second[9].x;
-  const crossedGeometry = wristOrder * knuckleOrder < -0.0005 || wristGap < 0.18;
-  const oppositeHandOrientation = (first[4].x - first[20].x) * (second[4].x - second[20].x) < 0;
-  const geometryPose = crossedGeometry && oppositeHandOrientation;
-  const labeledPose = right >= 0 && left >= 0 && hands[right][0].x < hands[left][0].x &&
-    hands[right][4].x > hands[right][20].x && hands[left][4].x < hands[left][20].x;
-  const pose = onChest && (geometryPose || labeledPose);
-  state.loveSince = pose ? (state.loveSince || now) : 0;
-  if (pose && now - state.loveSince >= 500) { announce('รัก', now); state.loveSince = 0; }
+function detectLove(hands, result, face, now, arms) {
+  let pose = false;
+  if (face && arms?.bothRaised && hands.length) {
+    const [a, b] = arms.wrists;
+    const gap = Math.abs(a.x - b.x) / arms.width;
+    const levelWrists = Math.abs(a.y - b.y) < arms.height * .3;
+    const inwardPalm = hands.some((p) => {
+      const palm = handMetricDistance(p[0], p[9]);
+      const inward = (p[12].x - p[0].x) * (p[0].x - arms.center.x) < 0;
+      const crossesCenter = (p[12].x - arms.center.x) * (p[0].x - arms.center.x) < 0;
+      const acrossChest = Math.abs(p[12].x - p[0].x) * (frameCanvas.width / frameCanvas.height) > palm * .7;
+      const open = [8, 12, 16, 20].every((tip) => fingerBendAngle(p, tip) > 130);
+      const together = [8, 12, 16].every((tip) => handMetricDistance(p[tip], p[tip + 4]) < palm * .7);
+      const atWrist = arms.wrists.some((w) => handMetricDistance(p[0], w) < arms.height * .55);
+      return palm > .015 && inward && crossesCenter && acrossChest && open && together && atWrist;
+    });
+    pose = gap > .12 && gap < .85 && levelWrists && inwardPalm;
+  }
+  if (pose) {
+    loveHold.lastValid = now;
+    state.loveSince = state.loveSince || now;
+    if (!loveHold.latched && now - state.loveSince >= 500 && announce('รัก', now)) loveHold.latched = true;
+  } else {
+    state.loveSince = 0;
+    if (now - loveHold.lastValid > 600) loveHold.latched = false;
+  }
   return pose;
 }
 
@@ -404,29 +445,36 @@ function detectHelpSOS(hands, now) {
   return state.sosStage > 0 || state.sosHoldSince > 0;
 }
 
-function recognizeSigns(handsResult, faceResult, now) {
+function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
   const hands = handsResult.landmarks || [];
   const face = (faceResult.faceLandmarks || [])[0];
 
+  const arms = chestArms(poseResult?.landmarks?.[0]);
   const helloActive = detectHello(hands, face, now);
-
-  if (!helloActive && hands.length === 1 && face) {
+  const loveActive = !helloActive && detectLove(hands, handsResult, face, now, arms);
+  if (helloActive) { state.loveSince = 0; if (now - loveHold.lastValid > 600) loveHold.latched = false; }
+  if (!helloActive && !loveActive && hands.length === 1 && face) {
+    lastSingleAt = now;
     const points = hands[0];
     const hungryActive = detectHungry(points, face, now);
     const heActive = detectHe(points, face, now);
     if (hungryActive || heActive) resetSingleHandState();
-    else { detectMe(points, face, now); detectParents(points, face, now); }
-  } else { resetSingleHandState(); resetAddedSigns(); }
+    else { detectMe(points, face, now, arms); detectParents(points, face, now); }
+  } else if (!helloActive && !loveActive && arms?.singleRaised && face && hands.length === 2) {
+    lastSingleAt = now;
+    const points = [...hands].sort((a, b) => handMetricDistance(a[0], arms.singleRaised) - handMetricDistance(b[0], arms.singleRaised))[0];
+    detectMe(points, face, now, arms);
+  } else if (helloActive || loveActive || hands.length > 1 || now - lastSingleAt > 500) {
+    resetSingleHandState(); resetAddedSigns();
+  }
+  if (!helloActive && !loveActive) { detectAngry(hands, face, now); detectSick(hands, handsResult, face, now); }
 
-  if (!helloActive) { detectAngry(hands, face, now); detectSick(hands, handsResult, face, now); }
-
-  if (!helloActive && hands.length === 2 && face) detectLove(hands, handsResult, face, now);
-  else state.loveSince = 0;
-
-  const sosActive = helloActive ? false : detectHelpSOS(hands, now);
-  if (helloActive) { state.sosStage = 0; state.sosHoldSince = 0; }
+  const sosActive = helloActive || loveActive ? false : detectHelpSOS(hands, now);
+  if (helloActive || loveActive) { state.sosStage = 0; state.sosHoldSince = 0; }
 
   if (state.lastWord && now - state.lastWordAt < 1500) state.prompt = `ตรวจพบ: ${state.lastWord}`;
+  else if (loveActive && !loveHold.latched) state.prompt = 'ท่ารัก: วางสองมือไขว้ที่อกแล้วค้างสักครู่';
+  else if (state.meSince && !state.meLatched) state.prompt = `ท่าฉัน: ค้างมือที่อกอีก ${Math.max(0, (1500 - (now - state.meSince)) / 1000).toFixed(1)} วินาที`;
   else if (helloActive && !helloState.latched) state.prompt = 'ท่าสวัสดี: พนมมือแล้วก้มศีรษะไหว้';
   else if (addedSigns.hungryStage > 0) state.prompt = 'ท่าหิว: งอนิ้วชี้เข้าบริเวณลำคอ';
   else if (addedSigns.heSince && !addedSigns.heLatched && now - addedSigns.heLastValid <= 400) state.prompt = 'ท่าเขา: ยื่นมือออกด้านข้างเล็กน้อย';
@@ -437,14 +485,50 @@ function recognizeSigns(handsResult, faceResult, now) {
   return state.prompt;
 }
 
+const framingState = { pending: '', since: 0, shown: '' };
+function framingFeedback(handsResult, faceResult, poseResult, now = 0) {
+  const hands = handsResult.landmarks || [];
+  const faces = faceResult.faceLandmarks || [];
+  if (!faces.length && helloState.since && now - helloState.lastValid <= 600) return { key: 'bow', level: 'info', message: 'กำลังติดตามท่าไหว้ · ค่อย ๆ เงยหน้ากลับหลังทำท่า' };
+  if (!faces.length) return { key: 'face', level: 'warning', message: 'ไม่พบใบหน้า · หันหน้าเข้ากล้องและจัดแสงให้เห็นใบหน้าชัดเจน' };
+  if (!hands.length) return { key: 'hands', level: 'warning', message: 'ไม่พบมือ · ยกมือเข้ามาในภาพให้เห็นทั้งฝ่ามือและปลายนิ้ว' };
+  const edge = hands.some((p) => p.some((point) => point.x < .025 || point.x > .975 || point.y < .025 || point.y > .975));
+  if (edge) return { key: 'edge', level: 'warning', message: 'มืออยู่ชิดขอบภาพ · ถอยออกเล็กน้อยหรือขยับมือเข้ากลางภาพ' };
+  const face = faces[0];
+  if (Math.abs(face[234].x - face[454].x) < .1) return { key: 'far', level: 'warning', message: 'ใบหน้าอยู่ไกลกล้อง · ขยับเข้าใกล้ให้เห็นใบหน้าและมือชัดเจน' };
+  if (!chestArms(poseResult?.landmarks?.[0])) return { key: 'body', level: 'info', message: 'จัดกล้องให้เห็นไหล่และแขนด้วย เพื่อช่วยแยกท่า “ฉัน” กับ “รัก”' };
+  return { key: 'ready', level: 'ready', message: 'เห็นใบหน้าและมือแล้ว · ทำท่าตามคลิปตัวอย่างได้เลย' };
+}
+function updateFramingGuidance(handsResult, faceResult, poseResult, now) {
+  const panel = document.getElementById('camera-framing');
+  panel.hidden = false;
+  const faceSeen = Boolean(faceResult.faceLandmarks?.length);
+  const handCount = handsResult.landmarks?.length || 0;
+  const faceChip = document.getElementById('camera-face-chip');
+  const handChip = document.getElementById('camera-hand-chip');
+  faceChip.textContent = faceSeen ? '✓ พบใบหน้า' : '○ ยังไม่พบใบหน้า';
+  faceChip.dataset.found = String(faceSeen);
+  handChip.textContent = handCount ? `✓ พบมือ ${handCount} ข้าง` : '○ ยังไม่พบมือ';
+  handChip.dataset.found = String(handCount > 0);
+  const feedback = framingFeedback(handsResult, faceResult, poseResult, now);
+  if (feedback.key !== framingState.pending) { framingState.pending = feedback.key; framingState.since = now; }
+  // Avoid flashing warnings during a bow or brief tracking loss.
+  if (framingState.shown !== feedback.key && now - framingState.since >= 550) {
+    framingState.shown = feedback.key;
+    panel.dataset.level = feedback.level;
+    document.getElementById('camera-guidance').textContent = feedback.message;
+  }
+}
+
 async function loadModels() {
   badge.textContent = 'กำลังโหลดตัวตรวจจับ…';
   const fileset = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.0/wasm');
-  const [hand, face] = await Promise.all([
+  const [hand, face, pose] = await Promise.all([
     HandLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: HAND_MODEL }, runningMode: 'VIDEO', numHands: 2, minHandDetectionConfidence: 0.55, minTrackingConfidence: 0.5 }),
-    FaceLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: FACE_MODEL }, runningMode: 'VIDEO', numFaces: 1, minFaceDetectionConfidence: 0.5, minTrackingConfidence: 0.5 })
+    FaceLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: FACE_MODEL }, runningMode: 'VIDEO', numFaces: 1, minFaceDetectionConfidence: 0.5, minTrackingConfidence: 0.5 }),
+    PoseLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: POSE_MODEL }, runningMode: 'VIDEO', numPoses: 1, minPoseDetectionConfidence: .5, minTrackingConfidence: .5 })
   ]);
-  handTask = hand; faceTask = face;
+  handTask = hand; faceTask = face; poseTask = pose;
 }
 
 function inferFrame() {
@@ -463,7 +547,13 @@ function inferFrame() {
       const timestamp = Math.round(now);
       const handsResult = handTask.detectForVideo(frameCanvas, timestamp);
       const faceResult = faceTask.detectForVideo(frameCanvas, timestamp);
-      badge.textContent = recognizeSigns(handsResult, faceResult, now);
+      if (handsResult.landmarks.length && faceResult.faceLandmarks.length && now - lastPoseAt >= 440) {
+        lastPoseResult = poseTask.detectForVideo(frameCanvas, timestamp); lastPoseAt = now;
+      }
+      const freshPose = now - lastPoseAt <= 700 ? lastPoseResult : null;
+      badge.textContent = recognizeSigns(handsResult, faceResult, now, freshPose);
+      updateFramingGuidance(handsResult, faceResult, freshPose, now);
+      if (now - state.lastWordAt > 2800) document.getElementById('gesture-live-caption').hidden = true;
     } catch (error) { badge.textContent = 'ประมวลผลกล้องไม่สำเร็จ'; }
   }
   loopId = requestAnimationFrame(inferFrame);
@@ -472,13 +562,15 @@ function inferFrame() {
 async function startCamera() {
   startButton.disabled = true;
   cameraWrap.dataset.cameraState = 'loading';
+  framingState.pending = ''; framingState.shown = ''; framingState.since = 0;
+  document.getElementById('camera-guidance').textContent = 'กำลังตรวจตำแหน่งใบหน้าและมือ…';
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
     camera.srcObject = stream;
     await camera.play();
     updateCameraAspectRatio();
     placeholder.hidden = true;
-    if (!handTask || !faceTask) await loadModels();
+    if (!handTask || !faceTask || !poseTask) await loadModels();
     startButton.hidden = true; stopButton.hidden = false;
     badge.textContent = 'กำลังตรวจจับท่าที่รองรับ';
     cameraWrap.dataset.cameraState = 'ready';
@@ -503,6 +595,8 @@ function stopCamera() {
   cameraWrap.style.aspectRatio = '4 / 3';
   startButton.hidden = false; startButton.disabled = false; stopButton.hidden = true; badge.textContent = 'ปิดกล้อง';
   resetRecognitionState();
+  lastPoseResult = null; lastPoseAt = -Infinity;
+  document.getElementById('camera-framing').hidden = true;
 }
 
 const cameraSetupDialog = document.getElementById('camera-setup-dialog');
