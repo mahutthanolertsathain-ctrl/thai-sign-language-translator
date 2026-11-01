@@ -223,42 +223,58 @@ const loveHold = { latched: false, lastValid: 0 };
 const sickHold = { latched: false, lastValid: 0 };
 let lastSingleAt = 0;
 function chestArms(pose) {
-  if (!pose || [11, 12, 15, 16].some((i) => (pose[i].visibility ?? 0) < .5)) return null;
+  if (!pose || [11, 12].some((i) => (pose[i].visibility ?? 0) < .3)) return null;
   const aspect = frameCanvas.width / frameCanvas.height;
-  const width = Math.abs(pose[11].x - pose[12].x);
-  const height = width * aspect;
-  if (width < .08) return null;
+  const width = Math.abs(pose[11].x - pose[12].x), height = width * aspect;
+  if (width < .06) return null;
   const center = { x: (pose[11].x + pose[12].x) / 2, y: (pose[11].y + pose[12].y) / 2 };
   const wrists = [pose[15], pose[16]];
-  const raised = wrists.map((w) => Math.abs(w.x - center.x) < width * .75 && w.y > center.y - height * .25 && w.y < center.y + height * .67);
-  const down = wrists.map((w) => w.y > center.y + height * .88);
+  const visible = wrists.map((w) => (w.visibility ?? 0) >= .25);
+  const raised = wrists.map((w, i) => visible[i] && Math.abs(w.x - center.x) < width * 1.1
+    && w.y > center.y - height * .45 && w.y < center.y + height * 1.05);
+  const down = wrists.map((w, i) => !visible[i] || w.y >= center.y + height * 1.05);
   return { width, height, center, wrists, bothRaised: raised.every(Boolean),
     singleRaised: raised[0] && down[1] ? wrists[0] : raised[1] && down[0] ? wrists[1] : null };
+}
+function chestPalm(points, face) {
+  const palm = handMetricDistance(points[0], points[9]);
+  const aspect = frameCanvas.width / frameCanvas.height;
+  const faceWidth = Math.abs(face[234].x - face[454].x), faceScale = faceWidth * aspect;
+  const openCount = [8, 12, 16, 20].filter((tip) => fingerBendAngle(points, tip) > 115).length;
+  const together = [8, 12, 16].every((tip) => handMetricDistance(points[tip], points[tip + 4]) < palm * .9);
+  const onChest = points[9].y > face[152].y + faceScale * .05
+    && points[9].y < face[152].y + faceScale * 3.3
+    && Math.abs(points[9].x - face[152].x) < faceWidth * 1.8;
+  const dx = (points[12].x - points[0].x) * aspect;
+  return { palm, dx, open: palm > .012 && openCount >= 3 && together,
+    pose: palm > .012 && openCount >= 3 && together && onChest && Math.abs(dx) > palm * .5 };
 }
 
 function detectMe(points, face, now, arms) {
   const chin = face[152];
-  const fingersExtended = [8, 12, 16, 20].every((tip) => distance(points[tip], points[tip - 2]) > 0.02);
-  const fingertipsTogether = distance(points[8], points[12]) < 0.08 && distance(points[12], points[16]) < 0.08 && distance(points[16], points[20]) < 0.08;
-  const pose = Boolean(arms?.singleRaised) && handMetricDistance(points[0], arms.singleRaised) < arms.height * .55
-    && fingersExtended && fingertipsTogether && points[9].y > chin.y + 0.02
-    && Math.abs(points[9].x - chin.x) < Math.abs(face[234].x - face[454].x) * .95;
+  const hand = chestPalm(points, face);
+  // Body landmarks improve separation when available, but a hidden idle arm
+  // must not prevent a single clear hand on the chest from being recognized.
+  const rightHandFallback = points[0].x > chin.x + Math.abs(face[234].x - face[454].x) * .08 && hand.dx < 0;
+  const pose = hand.pose && !arms?.bothRaised && (arms?.singleRaised || rightHandFallback);
   if (pose) {
     state.meLastValid = now;
     if (!state.meLatched) {
-      state.meSince = state.meSince || now;
+      if (!state.meSince || !state.meAnchor || handMetricDistance(points[0], state.meAnchor) > hand.palm * .85) {
+        state.meSince = now; state.meAnchor = { ...points[0] };
+      }
       if (now - state.meSince >= 1500) {
         announce('ฉัน', now);
         state.meSince = 0;
         state.meLatched = true;
       }
     }
-  } else if (!state.meLastValid || now - state.meLastValid > 300) {
+  } else if (!state.meLastValid || now - state.meLastValid > 450) {
     state.meSince = 0;
     state.meLastValid = 0;
     state.meLatched = false;
   }
-  const trackingGrace = state.meLastValid > 0 && now - state.meLastValid <= 300;
+  const trackingGrace = state.meLastValid > 0 && now - state.meLastValid <= 450;
   return pose || trackingGrace;
 }
 
@@ -376,21 +392,25 @@ function detectParents(points, face, now) {
 
 function detectLove(hands, result, face, now, arms) {
   let pose = false;
-  if (face && arms?.bothRaised && hands.length) {
-    const [a, b] = arms.wrists;
-    const gap = Math.abs(a.x - b.x) / arms.width;
-    const levelWrists = Math.abs(a.y - b.y) < arms.height * .3;
-    const inwardPalm = hands.some((p) => {
-      const palm = handMetricDistance(p[0], p[9]);
-      const inward = (p[12].x - p[0].x) * (p[0].x - arms.center.x) < 0;
-      const crossesCenter = (p[12].x - arms.center.x) * (p[0].x - arms.center.x) < 0;
-      const acrossChest = Math.abs(p[12].x - p[0].x) * (frameCanvas.width / frameCanvas.height) > palm * .7;
-      const open = [8, 12, 16, 20].every((tip) => fingerBendAngle(p, tip) > 130);
-      const together = [8, 12, 16].every((tip) => handMetricDistance(p[tip], p[tip + 4]) < palm * .7);
-      const atWrist = arms.wrists.some((w) => handMetricDistance(p[0], w) < arms.height * .55);
-      return palm > .015 && inward && crossesCenter && acrossChest && open && together && atWrist;
-    });
-    pose = gap > .12 && gap < .85 && levelWrists && inwardPalm;
+  if (face && hands.length) {
+    const candidates = hands.map((points) => ({ points, ...chestPalm(points, face) })).filter((hand) => hand.pose);
+    if (candidates.length === 2) {
+      const [a, b] = candidates;
+      const palm = (a.palm + b.palm) / 2;
+      const interval = (p) => [Math.min(p[0].x, p[12].x), Math.max(p[0].x, p[12].x)];
+      const ia = interval(a.points), ib = interval(b.points);
+      const overlap = (Math.min(ia[1], ib[1]) - Math.max(ia[0], ib[0])) * (frameCanvas.width / frameCanvas.height);
+      pose = a.dx * b.dx < 0 && overlap > palm * .25
+        && handMetricDistance(a.points[9], b.points[9]) < palm * 2.1;
+    }
+    if (!pose && arms?.bothRaised) {
+      const [a, b] = arms.wrists;
+      const closeWrists = Math.abs(a.x - b.x) < arms.width * 1.25 && Math.abs(a.y - b.y) < arms.height * .65;
+      pose = closeWrists && candidates.some(({ points: p }) =>
+        (p[12].x - p[0].x) * (p[0].x - arms.center.x) < 0
+        && Math.abs(p[12].x - arms.center.x) < Math.abs(face[234].x - face[454].x) * 1.2
+        && arms.wrists.some((w) => handMetricDistance(p[0], w) < arms.height * .9));
+    }
   }
   if (pose) {
     loveHold.lastValid = now;
@@ -496,7 +516,7 @@ function framingFeedback(handsResult, faceResult, poseResult, now = 0) {
   if (edge) return { key: 'edge', level: 'warning', message: 'มืออยู่ชิดขอบภาพ · ถอยออกเล็กน้อยหรือขยับมือเข้ากลางภาพ' };
   const face = faces[0];
   if (Math.abs(face[234].x - face[454].x) < .1) return { key: 'far', level: 'warning', message: 'ใบหน้าอยู่ไกลกล้อง · ขยับเข้าใกล้ให้เห็นใบหน้าและมือชัดเจน' };
-  if (!chestArms(poseResult?.landmarks?.[0])) return { key: 'body', level: 'info', message: 'จัดกล้องให้เห็นไหล่และแขนด้วย เพื่อช่วยแยกท่า “ฉัน” กับ “รัก”' };
+  if (!chestArms(poseResult?.landmarks?.[0])) return { key: 'body', level: 'info', message: 'เห็นใบหน้าและมือแล้ว · หากเห็นไหล่และแขนด้วย จะช่วยแยกท่า “ฉัน” กับ “รัก” ได้ดีขึ้น' };
   return { key: 'ready', level: 'ready', message: 'เห็นใบหน้าและมือแล้ว · ทำท่าตามคลิปตัวอย่างได้เลย' };
 }
 function updateFramingGuidance(handsResult, faceResult, poseResult, now) {
@@ -526,7 +546,7 @@ async function loadModels() {
   const [hand, face, pose] = await Promise.all([
     HandLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: HAND_MODEL }, runningMode: 'VIDEO', numHands: 2, minHandDetectionConfidence: 0.55, minTrackingConfidence: 0.5 }),
     FaceLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: FACE_MODEL }, runningMode: 'VIDEO', numFaces: 1, minFaceDetectionConfidence: 0.5, minTrackingConfidence: 0.5 }),
-    PoseLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: POSE_MODEL }, runningMode: 'VIDEO', numPoses: 1, minPoseDetectionConfidence: .5, minTrackingConfidence: .5 })
+    PoseLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: POSE_MODEL }, runningMode: 'VIDEO', numPoses: 1, minPoseDetectionConfidence: .5, minTrackingConfidence: .5 }).catch(() => null)
   ]);
   handTask = hand; faceTask = face; poseTask = pose;
 }
@@ -547,8 +567,10 @@ function inferFrame() {
       const timestamp = Math.round(now);
       const handsResult = handTask.detectForVideo(frameCanvas, timestamp);
       const faceResult = faceTask.detectForVideo(frameCanvas, timestamp);
-      if (handsResult.landmarks.length && faceResult.faceLandmarks.length && now - lastPoseAt >= 440) {
-        lastPoseResult = poseTask.detectForVideo(frameCanvas, timestamp); lastPoseAt = now;
+      if (poseTask && handsResult.landmarks.length && faceResult.faceLandmarks.length && now - lastPoseAt >= 440) {
+        try { lastPoseResult = poseTask.detectForVideo(frameCanvas, timestamp); }
+        catch (_) { lastPoseResult = null; }
+        lastPoseAt = now;
       }
       const freshPose = now - lastPoseAt <= 700 ? lastPoseResult : null;
       badge.textContent = recognizeSigns(handsResult, faceResult, now, freshPose);
@@ -570,7 +592,7 @@ async function startCamera() {
     await camera.play();
     updateCameraAspectRatio();
     placeholder.hidden = true;
-    if (!handTask || !faceTask || !poseTask) await loadModels();
+    if (!handTask || !faceTask) await loadModels();
     startButton.hidden = true; stopButton.hidden = false;
     badge.textContent = 'กำลังตรวจจับท่าที่รองรับ';
     cameraWrap.dataset.cameraState = 'ready';

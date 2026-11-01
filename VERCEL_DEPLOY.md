@@ -14,7 +14,7 @@ Vercel Hobby is free for personal, non-commercial use, with usage limits. The 75
 
 ## Browser processing
 
-The site uses browser speech recognition and speech synthesis. Camera processing runs with MediaPipe in the visitor's browser. The hand, face, and lightweight pose landmark models help distinguish a single hand on the chest from overlapping hands for รัก. Pose inference runs at most once every 440 ms; camera status hints debounce brief tracking losses. The camera recognizes only ฉัน, เขา, หิว, สวัสดี, พ่อ, แม่, โกรธ, รัก, ป่วย/ไม่สบาย, and ช่วยฉันด้วย.
+The site uses browser speech recognition and speech synthesis. Camera processing runs with MediaPipe in the visitor's browser. The hand, face, and lightweight pose landmark models help distinguish a single hand on the chest from overlapping hands for รัก. Pose is supplementary: clear hand geometry can recognize ฉัน and two visible hands can recognize รัก without a full body estimate. Pose inference runs at most once every 440 ms; camera status hints debounce brief tracking losses. The camera recognizes only ฉัน, เขา, หิว, สวัสดี, พ่อ, แม่, โกรธ, รัก, ป่วย/ไม่สบาย, and ช่วยฉันด้วย.
 
 Camera frames are processed on the device and are not sent to the app server. MediaPipe's documentation says it sends usage metrics, so the page discloses that to visitors. The WASM runtime and landmark models load from jsDelivr and Google Storage when the camera is started.
 
