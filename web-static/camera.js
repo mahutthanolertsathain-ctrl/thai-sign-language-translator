@@ -530,6 +530,14 @@ function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
 }
 
 const framingState = { pending: '', since: 0, shown: '' };
+function chestVisible(pose) {
+  if (!pose || !pose[11] || !pose[12]) return false;
+  const shoulders = [pose[11], pose[12]];
+  if (shoulders.some((p) => (p.visibility ?? 0) < .45 || p.x < .025 || p.x > .975 || p.y < .025 || p.y > .9)) return false;
+  const width = Math.abs(shoulders[0].x - shoulders[1].x);
+  const chestBottom = Math.max(shoulders[0].y, shoulders[1].y) + width * (frameCanvas.width / frameCanvas.height) * .65;
+  return width > .06 && chestBottom < .97;
+}
 function framingFeedback(handsResult, faceResult, poseResult, now = 0) {
   const hands = handsResult.landmarks || [];
   const faces = faceResult.faceLandmarks || [];
@@ -540,8 +548,8 @@ function framingFeedback(handsResult, faceResult, poseResult, now = 0) {
   if (edge) return { key: 'edge', level: 'warning', message: 'มืออยู่ชิดขอบภาพ · ถอยออกเล็กน้อยหรือขยับมือเข้ากลางภาพ' };
   const face = faces[0];
   if (Math.abs(face[234].x - face[454].x) < .1) return { key: 'far', level: 'warning', message: 'ใบหน้าอยู่ไกลกล้อง · ขยับเข้าใกล้ให้เห็นใบหน้าและมือชัดเจน' };
-  if (!chestArms(poseResult?.landmarks?.[0])) return { key: 'body', level: 'info', message: 'เห็นใบหน้าและมือแล้ว · หากเห็นไหล่และแขนด้วย จะช่วยแยกท่า “ฉัน” กับ “รัก” ได้ดีขึ้น' };
-  return { key: 'ready', level: 'ready', message: 'เห็นใบหน้าและมือแล้ว · ทำท่าตามคลิปตัวอย่างได้เลย' };
+  if (!chestVisible(poseResult?.landmarks?.[0])) return { key: 'body', level: 'info', message: 'ยังไม่เห็นช่วงอกชัดเจน · ถอยออกหรือปรับกล้องให้เห็นไหล่ทั้งสองข้างและลำตัวช่วงอก' };
+  return { key: 'ready', level: 'ready', message: 'เห็นใบหน้า มือ และช่วงอกแล้ว · ทำท่าตามคลิปตัวอย่างได้เลย' };
 }
 function updateFramingGuidance(handsResult, faceResult, poseResult, now) {
   const panel = document.getElementById('camera-framing');
@@ -554,6 +562,10 @@ function updateFramingGuidance(handsResult, faceResult, poseResult, now) {
   faceChip.dataset.found = String(faceSeen);
   handChip.textContent = handCount ? `✓ พบมือ ${handCount} ข้าง` : '○ ยังไม่พบมือ';
   handChip.dataset.found = String(handCount > 0);
+  const chestSeen = chestVisible(poseResult?.landmarks?.[0]);
+  const chestChip = document.getElementById('camera-chest-chip');
+  chestChip.textContent = chestSeen ? '✓ เห็นช่วงอก' : !poseTask ? '○ ยังไม่ยืนยันช่วงอก' : '○ ยังไม่เห็นช่วงอกชัดเจน';
+  chestChip.dataset.found = String(chestSeen);
   const feedback = framingFeedback(handsResult, faceResult, poseResult, now);
   if (feedback.key !== framingState.pending) { framingState.pending = feedback.key; framingState.since = now; }
   // Avoid flashing warnings during a bow or brief tracking loss.
@@ -591,7 +603,7 @@ function inferFrame() {
       const timestamp = Math.round(now);
       const handsResult = handTask.detectForVideo(frameCanvas, timestamp);
       const faceResult = faceTask.detectForVideo(frameCanvas, timestamp);
-      if (poseTask && handsResult.landmarks.length && faceResult.faceLandmarks.length && now - lastPoseAt >= 440) {
+      if (poseTask && (faceResult.faceLandmarks.length || handsResult.landmarks.length) && now - lastPoseAt >= 440) {
         try { lastPoseResult = poseTask.detectForVideo(frameCanvas, timestamp); }
         catch (_) { lastPoseResult = null; }
         lastPoseAt = now;
@@ -609,7 +621,7 @@ async function startCamera() {
   startButton.disabled = true;
   cameraWrap.dataset.cameraState = 'loading';
   framingState.pending = ''; framingState.shown = ''; framingState.since = 0;
-  document.getElementById('camera-guidance').textContent = 'กำลังตรวจตำแหน่งใบหน้าและมือ…';
+  document.getElementById('camera-guidance').textContent = 'กำลังตรวจใบหน้า มือ และช่วงอก…';
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
     camera.srcObject = stream;
