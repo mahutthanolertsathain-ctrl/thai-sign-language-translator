@@ -136,6 +136,18 @@
     </section>
     <footer><span class="footer-brand">มือพูด · MUEPOOD</span><span>ต้นแบบเพื่อเรียนรู้และพัฒนาการสื่อสารร่วมกัน</span><br>สำหรับโทรศัพท์และแท็บเล็ต ให้เปิดผ่าน HTTPS และอนุญาตไมโครโฟนเมื่อเบราว์เซอร์ถาม</footer>
   </main>
+  <dialog id="camera-setup-dialog" class="camera-setup-dialog" aria-labelledby="camera-setup-title" aria-describedby="camera-setup-message">
+    <div class="camera-setup-icon" aria-hidden="true">✋</div>
+    <span class="eyebrow">เตรียมพร้อมก่อนเปิดกล้อง</span>
+    <h2 id="camera-setup-title">จัดกล้องให้เห็นใบหน้าและมือชัดเจน</h2>
+    <p id="camera-setup-message">ระบบใช้ตำแหน่งใบหน้าและมือประกอบการตรวจจับท่าภาษามือ กรุณาจัดมุมกล้องให้พร้อมก่อนเริ่มใช้งาน</p>
+    <ol class="camera-setup-steps">
+      <li><strong>เห็นใบหน้า มือ และลำตัวช่วงอกครบ</strong><span>ตั้งกล้องตรงหน้า ให้มีแสงเพียงพอ และเว้นระยะให้ขยับมือได้โดยไม่หลุดออกจากภาพ</span></li>
+      <li><strong>ทำท่าครั้งละหนึ่งคน</strong><span>ให้มีเฉพาะใบหน้าและมือของผู้ทำท่าอยู่ในกล้อง หลีกเลี่ยงมือหรือใบหน้าของผู้อื่นเข้ามาในภาพ เพราะอาจทำให้ตรวจจับคลาดเคลื่อน</span></li>
+      <li><strong>ใช้มือขวาเป็นหลัก</strong><span>ทำทีละท่าตามคลิปตัวอย่าง ยกเว้นท่า “รัก” ที่ต้องใช้สองมือของผู้ทำท่าคนเดียวกัน</span></li>
+    </ol>
+    <div class="welcome-actions"><button id="camera-setup-cancel" class="secondary" type="button">กลับไปก่อน</button><button id="camera-setup-confirm" class="primary" type="button" autofocus>พร้อมแล้ว เปิดกล้อง</button></div>
+  </dialog>
   <script src="/web-static/app.js" defer></script>
   <script type="module" src="/web-static/camera.js"></script>
 </body>

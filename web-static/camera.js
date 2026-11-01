@@ -365,7 +365,13 @@ function stopCamera() {
   resetRecognitionState();
 }
 
-startButton.addEventListener('click', startCamera);
+const cameraSetupDialog = document.getElementById('camera-setup-dialog');
+startButton.addEventListener('click', () => cameraSetupDialog.showModal());
+document.getElementById('camera-setup-cancel').addEventListener('click', () => cameraSetupDialog.close());
+document.getElementById('camera-setup-confirm').addEventListener('click', () => {
+  cameraSetupDialog.close();
+  startCamera();
+});
 stopButton.addEventListener('click', stopCamera);
 camera.addEventListener('loadedmetadata', updateCameraAspectRatio);
 window.addEventListener('system-view-changed', (event) => {
