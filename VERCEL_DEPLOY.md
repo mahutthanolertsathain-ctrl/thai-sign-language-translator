@@ -14,7 +14,7 @@ Vercel Hobby is free for personal, non-commercial use, with usage limits. The 75
 
 ## Browser processing
 
-The site uses browser speech recognition and speech synthesis. Camera processing runs with MediaPipe in the visitor's browser. The camera recognizes only ฉัน, เขา, หิว, พ่อ, แม่, โกรธ, รัก, ป่วย/ไม่สบาย, and ช่วยฉันด้วย.
+The site uses browser speech recognition and speech synthesis. Camera processing runs with MediaPipe in the visitor's browser. The camera recognizes only ฉัน, เขา, หิว, สวัสดี, พ่อ, แม่, โกรธ, รัก, ป่วย/ไม่สบาย, and ช่วยฉันด้วย.
 
 Camera frames are processed on the device and are not sent to the app server. MediaPipe's documentation says it sends usage metrics, so the page discloses that to visitors. The WASM runtime and landmark models load from jsDelivr and Google Storage when the camera is started.
 

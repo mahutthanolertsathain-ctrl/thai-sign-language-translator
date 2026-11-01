@@ -71,6 +71,7 @@ function resetRecognitionState() {
   });
   state.cooldown.clear();
   resetAddedSigns();
+  resetHelloState();
 }
 function resetSingleHandState() {
   state.meSince = state.meLastValid = 0;
@@ -156,6 +157,59 @@ function detectHungry(points, face, now) {
     return true;
   }
   return addedSigns.hungryStage > 0;
+}
+
+// The greeting reference is palms together followed by a bow. A hand can
+// temporarily hide the other hand, and a deep bow can hide the face.
+const helloState = { since: 0, lastPairAt: 0, lastValid: 0, latched: false, bowSeen: false, baselineTilt: 0, faceHistory: [] };
+function resetHelloState() {
+  Object.assign(helloState, { since: 0, lastPairAt: 0, lastValid: 0, latched: false, bowSeen: false, baselineTilt: 0, faceHistory: [] });
+}
+function detectHello(hands, face, now) {
+  const aspect = frameCanvas.width / frameCanvas.height;
+  if (face) {
+    const tilt = Math.atan2((face[152].z - face[10].z) * aspect, face[152].y - face[10].y) * 180 / Math.PI;
+    helloState.faceHistory.push({ at: now, tilt, chin: face[152], width: Math.abs(face[234].x - face[454].x) });
+  }
+  helloState.faceHistory = helloState.faceHistory.filter((sample) => now - sample.at <= 1800);
+  const recentFace = helloState.faceHistory[helloState.faceHistory.length - 1];
+  const upright = (p) => {
+    const palm = handMetricDistance(p[0], p[9]);
+    return palm > .015 && (p[0].y - p[12].y) > palm * 1.15
+      && [8, 12, 16, 20].every((tip) => fingerBendAngle(p, tip) > 135)
+      && [8, 12, 16].every((tip) => handMetricDistance(p[tip], p[tip + 4]) < palm * .7);
+  };
+  const centered = (p) => recentFace && now - recentFace.at <= 1100
+    && Math.abs(p[9].x - recentFace.chin.x) < recentFace.width
+    && p[9].y > recentFace.chin.y - recentFace.width * aspect
+    && p[9].y < recentFace.chin.y + recentFace.width * aspect * 3.3;
+  let paired = false;
+  if (hands.length === 2 && hands.every(upright) && hands.every(centered)) {
+    const palm = (handMetricDistance(hands[0][0], hands[0][9]) + handMetricDistance(hands[1][0], hands[1][9])) / 2;
+    paired = handMetricDistance(hands[0][8], hands[1][8]) < palm * .95
+      && handMetricDistance(hands[0][0], hands[1][0]) < palm * 1.65;
+  }
+  if (paired) {
+    helloState.lastPairAt = now;
+    if (!helloState.since) {
+      helloState.since = now;
+      helloState.baselineTilt = Math.min(...helloState.faceHistory.map((sample) => sample.tilt));
+      helloState.bowSeen = helloState.faceHistory.some((sample) => now - sample.at < 850 && sample.tilt - helloState.baselineTilt > 18);
+    }
+  }
+  const singleContinuation = helloState.since && hands.length === 1 && upright(hands[0]) && centered(hands[0]) && now - helloState.lastPairAt <= 1100;
+  const valid = paired || singleContinuation;
+  if (helloState.since && face && recentFace.tilt - helloState.baselineTilt > 18) helloState.bowSeen = true;
+  if (valid) {
+    helloState.lastValid = now;
+    if (!helloState.latched && helloState.bowSeen && now - helloState.since >= 300) {
+      if (announce('สวัสดี', now)) helloState.latched = true;
+    }
+  } else if (helloState.since && now - helloState.lastValid > 600) {
+    helloState.since = 0; helloState.latched = false; helloState.bowSeen = false;
+  }
+  if (helloState.since && now - helloState.since > 4000 && !helloState.latched) helloState.since = 0;
+  return Boolean(valid || helloState.since && now - helloState.lastValid <= 600);
 }
 
 function detectMe(points, face, now) {
@@ -354,7 +408,9 @@ function recognizeSigns(handsResult, faceResult, now) {
   const hands = handsResult.landmarks || [];
   const face = (faceResult.faceLandmarks || [])[0];
 
-  if (hands.length === 1 && face) {
+  const helloActive = detectHello(hands, face, now);
+
+  if (!helloActive && hands.length === 1 && face) {
     const points = hands[0];
     const hungryActive = detectHungry(points, face, now);
     const heActive = detectHe(points, face, now);
@@ -362,15 +418,16 @@ function recognizeSigns(handsResult, faceResult, now) {
     else { detectMe(points, face, now); detectParents(points, face, now); }
   } else { resetSingleHandState(); resetAddedSigns(); }
 
-  detectAngry(hands, face, now);
-  detectSick(hands, handsResult, face, now);
+  if (!helloActive) { detectAngry(hands, face, now); detectSick(hands, handsResult, face, now); }
 
-  if (hands.length === 2 && face) detectLove(hands, handsResult, face, now);
+  if (!helloActive && hands.length === 2 && face) detectLove(hands, handsResult, face, now);
   else state.loveSince = 0;
 
-  const sosActive = detectHelpSOS(hands, now);
+  const sosActive = helloActive ? false : detectHelpSOS(hands, now);
+  if (helloActive) { state.sosStage = 0; state.sosHoldSince = 0; }
 
   if (state.lastWord && now - state.lastWordAt < 1500) state.prompt = `ตรวจพบ: ${state.lastWord}`;
+  else if (helloActive && !helloState.latched) state.prompt = 'ท่าสวัสดี: พนมมือแล้วก้มศีรษะไหว้';
   else if (addedSigns.hungryStage > 0) state.prompt = 'ท่าหิว: งอนิ้วชี้เข้าบริเวณลำคอ';
   else if (addedSigns.heSince && !addedSigns.heLatched && now - addedSigns.heLastValid <= 400) state.prompt = 'ท่าเขา: ยื่นมือออกด้านข้างเล็กน้อย';
   else if (state.sickStage > 0) state.prompt = 'ท่าป่วย: ขยับหลังมือชิดหน้าผากแล้วค้าง';
