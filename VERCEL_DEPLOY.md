@@ -8,7 +8,7 @@ The website is hosted as static files on Vercel. The deployment uses the isolate
 2. Open PowerShell in `D:\code` and run `.\deploy-vercel.ps1`. It refreshes `vercel-site/` from the source files and publishes Production.
 3. Open the Production URL on a phone or tablet over HTTPS.
 
-Production URL: https://code-amber-three.vercel.app
+Production URL: https://muepood.vercel.app
 
 Vercel Hobby is free for personal, non-commercial use, with usage limits. The 75 optimized sign clips total about 7.5 MB. See [Vercel limits](https://vercel.com/docs/limits) and [Hobby plan](https://vercel.com/docs/plans/hobby).
 

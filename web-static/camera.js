@@ -331,6 +331,7 @@ function inferFrame() {
 
 async function startCamera() {
   startButton.disabled = true;
+  cameraWrap.dataset.cameraState = 'loading';
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
     camera.srcObject = stream;
@@ -340,18 +341,22 @@ async function startCamera() {
     if (!handTask || !faceTask) await loadModels();
     startButton.hidden = true; stopButton.hidden = false;
     badge.textContent = 'กำลังตรวจจับท่าที่รองรับ';
+    cameraWrap.dataset.cameraState = 'ready';
     lastInferenceAt = 0; lastVideoTime = -1;
     loopId = requestAnimationFrame(inferFrame);
   } catch (error) {
     stream?.getTracks().forEach((track) => track.stop()); stream = null;
     startButton.disabled = false;
     badge.textContent = 'เปิดกล้องไม่ได้';
+    cameraWrap.dataset.cameraState = 'error';
     placeholder.hidden = false;
     placeholder.textContent = error?.name === 'NotAllowedError' ? 'กรุณาอนุญาตใช้กล้องในเบราว์เซอร์' : 'เปิดกล้องหรือโหลดตัวตรวจจับไม่สำเร็จ';
   }
 }
 
 function stopCamera() {
+  cameraWrap.dataset.cameraState = 'off';
+  document.getElementById('gesture-live-caption').hidden = true;
   cancelAnimationFrame(loopId);
   stream?.getTracks().forEach((track) => track.stop()); stream = null;
   camera.srcObject = null; placeholder.hidden = false; placeholder.textContent = 'แตะ “เปิดกล้อง” เพื่อเริ่มแปล';

@@ -9,8 +9,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/web-static/styles.css">
+  <link rel="stylesheet" href="/web-static/redesign.css">
 </head>
-<body>
+<body class="home-view">
   <div id="welcome-gate" class="welcome-gate" role="dialog" aria-modal="true" aria-labelledby="welcome-title" aria-describedby="welcome-message">
     <section class="welcome-card">
       <div id="welcome-step-1" class="welcome-step">
@@ -43,16 +44,19 @@
     </section>
   </div>
   <main id="main-content" class="page" inert>
-    <header class="intro">
-      <div><span class="eyebrow">SIGN LANGUAGE · VOICE</span><h1>เว็บไซต์แปลภาษามือแบบสองทิศทาง</h1><p>เลือกใช้ระบบวิดีโอ หรือระบบจับท่าทางภาษามือ</p></div>
-      <span class="privacy">ทำงานบนเบราว์เซอร์</span>
+    <header class="intro app-header">
+      <a class="brand" href="#" id="brand-home" aria-label="มือพูด กลับหน้าแรก"><span class="brand-symbol" aria-hidden="true">✋</span><span><strong>มือพูด<span class="brand-dot">.</span></strong><small>เว็บไซต์แปลภาษามือแบบสองทิศทาง</small></span></a>
+      <div class="header-actions"><button id="home-button" type="button" class="secondary">หน้าแรก</button><button id="motion-toggle" type="button" class="motion-toggle" aria-pressed="false">ลดการเคลื่อนไหว</button></div>
     </header>
-
+    <section class="home-hero" aria-labelledby="home-title">
+      <div class="hero-copy"><span class="hero-eyebrow"><i></i> เชื่อมทุกการสื่อสาร ด้วยมือของเรา</span><h1 id="home-title" tabindex="-1">ให้ทุกท่าทาง<br>มี<span>ความหมาย</span></h1><p>จากเสียงพูดสู่ภาษามือ จากท่าทางสู่เสียงพูด<br>เลือกวิธีสื่อสารของคุณ แล้วเริ่มต้นได้เลย</p><div class="hero-note"><span aria-hidden="true">↔</span> สองวิธีสื่อสาร ในเว็บไซต์เดียว</div></div>
+      <div class="hero-art" aria-hidden="true"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="art-hand">✋</div><div class="art-message message-one"><span>เสียงของคุณ</span><strong>สวัสดี ยินดีที่ได้รู้จัก</strong><div class="sound-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="art-message message-two"><span>จากมือ สู่ความหมาย</span><strong>ฉัน <em>รัก</em> แม่</strong><small>สื่อสารถึงกันได้มากขึ้น</small></div><span class="art-spark spark-one">✦</span><span class="art-spark spark-two">✧</span></div>
+    </section>
+    <div class="choose-heading"><span class="eyebrow">LET’S CONNECT</span><h2>วันนี้ อยากสื่อสารแบบไหน?</h2></div>
     <nav class="system-tabs" role="tablist" aria-label="เลือกระบบ">
-      <button id="video-tab" class="system-tab active" type="button" role="tab" aria-selected="true" aria-controls="video-system" data-system-target="video-system">🎞 ระบบวิดีโอภาษามือ</button>
-      <button id="gesture-tab" class="system-tab" type="button" role="tab" aria-selected="false" aria-controls="gesture-system" data-system-target="gesture-system">✋ ระบบจับท่าทางภาษามือ</button>
+      <button id="video-tab" class="system-tab" type="button" role="tab" aria-selected="false" aria-controls="video-system" data-system-target="video-system"><span class="mode-icon" aria-hidden="true">▶</span><span class="mode-copy"><strong>พูดหรือพิมพ์ → ดูภาษามือ</strong><small>ค้นหาคำศัพท์และดูคลิปตัวอย่างภาษามือ</small></span><span class="mode-arrow" aria-hidden="true">↗</span></button>
+      <button id="gesture-tab" class="system-tab" type="button" role="tab" aria-selected="false" aria-controls="gesture-system" data-system-target="gesture-system"><span class="mode-icon" aria-hidden="true">✋</span><span class="mode-copy"><strong>ทำท่า → ฟังเสียงพูด</strong><small>เปิดกล้อง แปลท่าที่รองรับ และต่อเป็นประโยค</small></span><span class="mode-arrow" aria-hidden="true">↗</span></button>
     </nav>
-
     <section id="video-system" class="system-panel" role="tabpanel" aria-labelledby="video-tab">
       <header class="system-heading"><span class="eyebrow">VIDEO SYSTEM</span><h2>ค้นหาวิดีโอภาษามือ</h2><p>พิมพ์หรือพูดคำที่ต้องการ แล้วระบบจะแสดงคลิปที่ตรงกัน</p></header>
       <div class="layout">
@@ -67,7 +71,8 @@
         <div class="side-column">
           <article class="card input-card">
             <span class="eyebrow">VIDEO SEARCH</span><h2>พูดหรือพิมพ์ข้อความ</h2>
-            <div class="input-row"><input id="text-input" type="text" placeholder="เช่น สวัสดี, ฉันหิว" autocomplete="off"><button id="send-button" class="primary" type="button">ค้นหา</button></div>
+            <label class="input-label" for="text-input">คำหรือประโยคที่ต้องการค้นหา</label><div class="input-row"><input id="text-input" type="text" placeholder="เช่น สวัสดี, ฉันหิว" autocomplete="off"><button id="send-button" class="primary" type="button">ค้นหา</button></div>
+            <div class="quick-words" aria-label="คำที่ใช้บ่อย"><span>ลองคำเหล่านี้</span><button type="button" data-quick-word="สวัสดี">สวัสดี</button><button type="button" data-quick-word="หิว">หิว</button><button type="button" data-quick-word="รัก">รัก</button><button type="button" data-quick-word="แม่">แม่</button></div>
             <p class="vocabulary-help">ตัวอย่างการเรียงท่าประโยค: “ฉันรักแม่” → “แม่–ฉัน–รัก” (กรรม–ประธาน–กริยา)</p>
             <button id="mic-button" class="mic-button" type="button"><span aria-hidden="true">🎙</span> แตะเพื่อพูด</button>
             <p id="mic-transcript" class="mic-transcript" aria-live="polite" hidden></p>
@@ -97,7 +102,7 @@
         <div class="left-column">
           <article class="card camera-card">
             <div class="card-heading"><div><span class="eyebrow">CAMERA</span><h2>ตรวจจับท่าทาง</h2></div><span class="video-count" id="camera-status">ปิดกล้อง</span></div>
-            <div class="camera-wrap"><video id="camera-video" autoplay muted playsinline></video><div id="camera-placeholder" class="camera-placeholder">แตะ “เปิดกล้อง” เพื่อเริ่มแปล</div></div>
+            <div class="camera-wrap"><div class="camera-live-label" aria-hidden="true"><i></i> CAMERA</div><video id="camera-video" autoplay muted playsinline></video><div id="camera-placeholder" class="camera-placeholder">แตะ “เปิดกล้อง” เพื่อเริ่มแปล</div><div id="gesture-live-caption" class="gesture-live-caption" hidden></div></div>
             <div class="camera-controls"><button id="camera-start" class="primary" type="button">เปิดกล้อง</button><button id="camera-stop" class="secondary" type="button" hidden>ปิดกล้อง</button></div>
             <p class="camera-note">ภาพประมวลผลบนอุปกรณ์และไม่ส่งออกไป; MediaPipe อาจส่งสถิติการใช้งานให้ Google</p>
           </article>
@@ -107,10 +112,14 @@
             <span class="eyebrow">DETECTED SIGNS</span><h2>ท่าที่ตรวจพบแล้ว</h2>
             <p id="gesture-status" class="status" role="status" aria-live="polite">เปิดกล้องเพื่อเริ่มตรวจท่าภาษามือ</p>
             <div id="gesture-result-list" class="result-list" aria-live="polite"></div>
+            <div id="sentence-progress" class="sentence-progress" hidden><div class="progress-track"><span id="sentence-progress-fill"></span></div><p id="sentence-progress-label"></p></div>
             <button id="gesture-speaker-test" class="secondary gesture-speaker-test" type="button">🔊 กดทุกครั้งก่อนเริ่มใช้</button>
             <button id="gesture-speak-button" class="secondary gesture-speak-button" type="button" hidden>🔊 พูดซ้ำ</button>
           </article>
-          <article class="card notice-card">
+
+        </div>
+      </div>
+          <article class="card notice-card supported-guide">
             <span class="eyebrow">SUPPORTED SIGNS</span><h2>คลิปตัวอย่างท่าที่ระบบรองรับ</h2>
             <p class="note">แตะปุ่มเล่นเพื่อดูคลิปตัวอย่าง แตะปุ่มขยายเพื่อดูคลิปเต็มจอ</p>
             <div class="gesture-clip-grid">
@@ -124,10 +133,8 @@
             </div>
             <p class="note">หลังตรวจพบท่าล่าสุด ระบบรอประมาณ 2.25 วินาทีก่อนพูด เพื่อให้มีเวลาต่อคำเป็นประโยค</p>
           </article>
-        </div>
-      </div>
     </section>
-    <footer>สำหรับโทรศัพท์และแท็บเล็ต ให้เปิดผ่าน HTTPS และอนุญาตไมโครโฟนเมื่อเบราว์เซอร์ถาม</footer>
+    <footer><span class="footer-brand">มือพูด · MUEPOOD</span><span>ต้นแบบเพื่อเรียนรู้และพัฒนาการสื่อสารร่วมกัน</span><br>สำหรับโทรศัพท์และแท็บเล็ต ให้เปิดผ่าน HTTPS และอนุญาตไมโครโฟนเมื่อเบราว์เซอร์ถาม</footer>
   </main>
   <script src="/web-static/app.js" defer></script>
   <script type="module" src="/web-static/camera.js"></script>

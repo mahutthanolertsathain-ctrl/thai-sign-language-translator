@@ -2,7 +2,7 @@
 
 ต้นแบบเว็บไซต์แปลภาษามือไทยแบบสองทิศทาง มีระบบค้นหาคลิปภาษามือจากข้อความหรือเสียงพูด และระบบตรวจจับท่าทางผ่านกล้องในเบราว์เซอร์
 
-เว็บไซต์เวอร์ชันปัจจุบัน: [https://code-amber-three.vercel.app](https://code-amber-three.vercel.app)
+เว็บไซต์เวอร์ชันปัจจุบัน: [https://muepood.vercel.app](https://muepood.vercel.app)
 
 ## จุดประสงค์ของโครงการ
 
@@ -25,7 +25,7 @@
 - `index.html` — หน้าเว็บหลัก
 - `web-static/app.js` — การค้นหาคลิป เสียงพูด และส่วนติดต่อผู้ใช้
 - `web-static/camera.js` — ตรวจจับท่าทางจากกล้อง
-- `web-static/styles.css` — รูปแบบหน้าเว็บ
+- `web-static/styles.css` และ `web-static/redesign.css` — รูปแบบหน้าเว็บและการแสดงผลตามขนาดหน้าจอ
 - `web-static/videos/` — คลิปวิดีโอที่เว็บใช้งาน
 - `web-static/vocabulary.json` — คำค้นที่เชื่อมกับคลิป
 - `vercel.json` — การตั้งค่าเผยแพร่เว็บไซต์แบบ static บน Vercel

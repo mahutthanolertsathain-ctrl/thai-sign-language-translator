@@ -47,13 +47,14 @@ function showSystemGuide(systemId, isInitial = false) {
   el('system-guide-enter').focus();
 }
 function activateSystem(systemId) {
+  document.body.classList.remove('home-view');
   document.querySelectorAll('[data-system-target]').forEach((item) => {
     const selected = item.dataset.systemTarget === systemId;
     item.classList.toggle('active', selected);
     item.setAttribute('aria-selected', String(selected));
   });
   document.querySelectorAll('.system-panel').forEach((panel) => { panel.hidden = panel.id !== systemId; });
-  if (systemId !== 'video-system') recognition?.stop();
+  if (systemId !== 'video-system') { recognition?.stop(); el('sign-video').pause(); queue = []; isPlaying = false; }
   if (systemId !== 'gesture-system') {
     pauseGestureReferenceVideos();
     const expandedFrame = document.querySelector('.gesture-clip-frame.expanded');
@@ -93,7 +94,10 @@ document.querySelectorAll('[data-recommended-device]').forEach((deviceButton) =>
 el('welcome-enter').addEventListener('click', () => {
   if (!document.querySelector('[data-recommended-device][aria-pressed="true"]')) return;
   el('welcome-gate').hidden = true;
-  showSystemGuide('video-system', true);
+  document.body.classList.remove('welcome-open');
+  el('main-content').inert = false;
+  el('home-title').focus({ preventScroll: true });
+  window.scrollTo({ top: 0, behavior: 'auto' });
 });
 el('welcome-next').focus();
 el('system-guide-back').addEventListener('click', () => {
@@ -260,6 +264,9 @@ function handleSignDetected(word) {
   const isNewWord = signSentenceBuffer[signSentenceBuffer.length - 1] !== word;
   if (!isNewWord) return;
   signSentenceBuffer.push(word);
+  el('gesture-live-caption').hidden = false;
+  el('gesture-live-caption').textContent = `ตรวจพบ: ${word}`;
+  startSentenceCountdown();
   if (signSentenceTimer) clearTimeout(signSentenceTimer);
   signSentenceTimer = setTimeout(flushSignSentence, SIGN_SENTENCE_DELAY_MS);
   el('gesture-status').textContent = `เก็บคำจากท่า: ${signSentenceBuffer.join(' ')} (รอท่าถัดไป…)`;
@@ -269,6 +276,7 @@ function handleSignDetected(word) {
 }
 
 function flushSignSentence() {
+  stopSentenceCountdown();
   signSentenceTimer = null;
   if (!signSentenceBuffer.length) return;
   const sentence = signSentenceBuffer.join(' ');
@@ -331,6 +339,7 @@ function clearSpeechWatchdog() {
 
 function reportGestureSpeechState(sentence, state) {
   const status = el('gesture-status');
+  document.querySelector('.gesture-output-card').dataset.speechState = state;
   if (state === 'started') status.textContent = `กำลังพูดประโยคจากท่าที่ตรวจพบ: ${sentence}`;
   else if (state === 'finished') status.textContent = `พูดแล้ว: ${sentence} · แตะ “พูดซ้ำ” ได้`;
   else if (state === 'failed') status.textContent = `เสียงไม่เริ่ม: ${sentence} · แตะ “พูดซ้ำ” หรือตรวจระดับเสียงอุปกรณ์`;
@@ -673,3 +682,67 @@ document.querySelectorAll('[data-system-target]').forEach((tab) => {
   tab.addEventListener('click', () => showSystemGuide(tab.dataset.systemTarget));
 });
 loadVocabulary().catch(() => { el('video-count').textContent = 'โหลดรายการคลิปไม่สำเร็จ'; el('status').textContent = 'โหลดข้อมูลวิดีโอไม่สำเร็จ กรุณารีเฟรชหน้า'; });
+
+// Presentation controls keep all camera and speech processing in the existing systems.
+const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+let motionPreference = null;
+try { motionPreference = localStorage.getItem('muepood-reduced-motion'); } catch (_) {}
+function setReducedMotion(reduced) {
+  document.body.classList.toggle('reduce-motion', reduced);
+  document.body.classList.toggle('allow-motion', !reduced);
+  el('motion-toggle').setAttribute('aria-pressed', String(reduced));
+  el('motion-toggle').textContent = reduced ? 'เปิดการเคลื่อนไหว' : 'ลดการเคลื่อนไหว';
+}
+setReducedMotion(motionPreference === null ? motionQuery.matches : motionPreference === 'true');
+el('motion-toggle').addEventListener('click', () => {
+  const reduced = !document.body.classList.contains('reduce-motion');
+  motionPreference = String(reduced);
+  setReducedMotion(reduced);
+  try { localStorage.setItem('muepood-reduced-motion', String(reduced)); } catch (_) {}
+});
+motionQuery.addEventListener('change', (event) => {
+  if (motionPreference === null) setReducedMotion(event.matches);
+});
+function goHome(event) {
+  event?.preventDefault();
+  document.body.classList.add('home-view');
+  el('sign-video').pause();
+  queue = []; isPlaying = false;
+  pauseGestureReferenceVideos();
+  try { recognition?.stop(); } catch (_) {}
+  document.querySelectorAll('[data-system-target]').forEach((button) => {
+    button.classList.remove('active'); button.setAttribute('aria-selected', 'false');
+  });
+  window.dispatchEvent(new CustomEvent('system-view-changed', { detail: { systemId: 'home' } }));
+  el('home-title').focus({ preventScroll: true });
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  window.scrollTo({ top: 0, behavior: 'auto' });
+}
+el('home-button').addEventListener('click', goHome);
+el('brand-home').addEventListener('click', goHome);
+document.querySelectorAll('[data-quick-word]').forEach((button) => {
+  button.addEventListener('click', () => {
+    el('text-input').value = button.dataset.quickWord;
+    submitText();
+  });
+});
+let sentenceCountdown = null;
+function stopSentenceCountdown() {
+  clearInterval(sentenceCountdown);
+  sentenceCountdown = null;
+  el('sentence-progress').hidden = true;
+}
+function startSentenceCountdown() {
+  clearInterval(sentenceCountdown);
+  document.querySelector('.gesture-output-card').dataset.speechState = 'collecting';
+  const deadline = performance.now() + SIGN_SENTENCE_DELAY_MS;
+  el('sentence-progress').hidden = false;
+  const update = () => {
+    const remaining = Math.max(0, deadline - performance.now());
+    el('sentence-progress-fill').style.width = `${remaining / SIGN_SENTENCE_DELAY_MS * 100}%`;
+    el('sentence-progress-label').textContent = `รอท่าถัดไปอีก ${(remaining / 1000).toFixed(1)} วินาที แล้วพูดประโยค`;
+    if (!remaining) stopSentenceCountdown();
+  };
+  update();
+  sentenceCountdown = setInterval(update, 100);
+}
