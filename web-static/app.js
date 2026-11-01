@@ -36,7 +36,7 @@ const systemGuides = {
   },
   'gesture-system': {
     title: 'วิธีใช้ระบบจับท่าทางภาษามือ',
-    message: 'แตะ “กดทุกครั้งก่อนเริ่มใช้” เพื่อทดสอบเสียง แล้วอนุญาตให้เว็บไซต์ใช้กล้อง จัดภาพให้เห็นใบหน้า มือ และลำตัวช่วงอกชัดเจน แนะนำให้ใช้มือขวาทำทีละท่า (ยกเว้นท่า “รัก” และ “สวัสดี” ที่ใช้สองมือ) จากนั้นกด “เปิดกล้อง” และทำท่าที่รองรับ ระบบจะรอประมาณ 2.25 วินาทีเพื่อให้ต่อท่าเป็นประโยคได้',
+    message: 'กด “เปิดกล้อง” อ่านคำแนะนำแล้วแตะ “พร้อมแล้ว เปิดกล้อง” ระบบจะเตรียมเสียงให้อัตโนมัติ จากนั้นอนุญาตให้เว็บไซต์ใช้กล้อง จัดภาพให้เห็นใบหน้า มือ และลำตัวช่วงอกชัดเจน แนะนำให้ใช้มือขวาทำทีละท่า (ยกเว้นท่า “รัก” และ “สวัสดี” ที่ใช้สองมือ) ระบบจะรอประมาณ 2.25 วินาทีหลังท่าล่าสุดเพื่อให้ต่อคำเป็นประโยคก่อนพูด',
   },
 };
 function showSystemGuide(systemId, isInitial = false) {
@@ -381,6 +381,7 @@ function finishSpeechRequest(request) {
   clearSpeechWatchdog();
   activeSpeech = null;
   request.callbacks.onEnd?.();
+  keepGestureCameraPlaying();
   pumpSpeechQueue();
 }
 
@@ -412,6 +413,7 @@ function startSpeechRequest(request) {
   utterance.onstart = () => {
     if (activeSpeech !== request) return;
     request.started = true;
+    keepGestureCameraPlaying();
     clearSpeechWatchdog();
     request.callbacks.onStart?.();
     speechWatchdogTimer = setTimeout(() => failSpeechRequest(request, 'speech-timeout', false), Math.max(10000, request.text.length * 700));
@@ -427,13 +429,13 @@ function startSpeechRequest(request) {
     failSpeechRequest(request, event.error || 'speech-error', retryable);
   };
   synth.resume();
+  speechWatchdogTimer = setTimeout(() => failSpeechRequest(request, 'speech-did-not-start'), 2800);
   try {
     synth.speak(utterance);
   } catch (error) {
     failSpeechRequest(request, error.name || 'speech-error');
     return;
   }
-  speechWatchdogTimer = setTimeout(() => failSpeechRequest(request, 'speech-did-not-start'), 2800);
 }
 
 function pumpSpeechQueue() {
@@ -462,6 +464,22 @@ function speakImmediately(text, callbacks = {}) {
   window.speechSynthesis.cancel();
   startSpeechRequest(makeSpeechRequest(text, callbacks));
 }
+
+function keepGestureCameraPlaying() {
+  const video = el('camera-video');
+  if (video.srcObject && video.paused) video.play().catch(() => {});
+}
+function prepareGestureAudioFromTap() {
+  if (practiceMode) return;
+  refreshThaiSpeechVoice();
+  // Keep speak() in the trusted click stack, before camera permission/model awaits.
+  // WebKit clears its initial speech user-gesture restriction here.
+  speakImmediately('ระบบเสียงพร้อมแล้ว', {
+    onStart: () => { el('gesture-status').textContent = 'เปิดเสียงแล้ว · เมื่อกล้องพร้อม ทำท่าที่รองรับได้เลย'; },
+    onError: () => { el('gesture-status').textContent = 'เริ่มเสียงไม่ได้ · ลองแตะ “พูดซ้ำ” หลังตรวจพบท่า หรือตรวจระดับเสียงอุปกรณ์'; },
+  });
+}
+el('camera-setup-confirm').addEventListener('click', prepareGestureAudioFromTap, { capture: true });
 
 function setMicIdle() {
   recognitionActive = false;
@@ -630,12 +648,12 @@ el('gesture-speaker-test').addEventListener('click', () => {
     onStart: () => { el('gesture-status').textContent = 'กำลังทดสอบลำโพง…'; },
     onEnd: () => {
       button.disabled = false;
-      button.textContent = '🔊 กดทุกครั้งก่อนเริ่มใช้';
+      button.textContent = '🔊 ทดสอบเสียง';
       el('gesture-status').textContent = 'ทดสอบลำโพงแล้ว: ระบบจับท่าทางพร้อมแล้ว';
     },
     onError: () => {
       button.disabled = false;
-      button.textContent = '🔊 กดทุกครั้งก่อนเริ่มใช้';
+      button.textContent = '🔊 ทดสอบเสียง';
       el('gesture-status').textContent = 'เสียงไม่ทำงาน ตรวจสอบระดับเสียงและการตั้งค่าเสียงพูดของอุปกรณ์';
     },
   });
@@ -828,7 +846,11 @@ function completePractice() {
 }
 el('practice-home').addEventListener('click', () => { pendingPractice = true; showSystemGuide('gesture-system'); });
 el('practice-mode').addEventListener('click', () => setPracticeMode(true));
-el('translation-mode').addEventListener('click', () => setPracticeMode(false));
+el('translation-mode').addEventListener('click', () => {
+  const wasPracticing = practiceMode;
+  setPracticeMode(false);
+  if (wasPracticing && practiceCameraReady) prepareGestureAudioFromTap();
+});
 el('practice-word').addEventListener('change', updatePracticeLesson);
 el('practice-retry').addEventListener('click', resetPracticeAttempt);
 el('practice-next').addEventListener('click', () => {
