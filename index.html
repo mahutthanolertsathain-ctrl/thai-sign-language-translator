@@ -101,14 +101,22 @@
       <div class="layout gesture-layout">
         <div class="left-column">
           <article class="card camera-card">
-            <div class="card-heading"><div><span class="eyebrow">CAMERA</span><h2>ตรวจจับท่าทาง</h2></div><span class="video-count" id="camera-status">ปิดกล้อง</span></div>
-            <div class="camera-wrap"><div class="camera-live-label" aria-hidden="true"><i></i> CAMERA</div><video id="camera-video" autoplay muted playsinline></video><div id="camera-placeholder" class="camera-placeholder">แตะ “เปิดกล้อง” เพื่อเริ่มแปล</div><div id="gesture-live-caption" class="gesture-live-caption" hidden></div></div>
-            <div class="camera-controls"><button id="camera-start" class="primary" type="button">เปิดกล้อง</button><button id="camera-stop" class="secondary" type="button" hidden>ปิดกล้อง</button></div>
-            <div id="camera-framing" class="camera-framing" hidden data-level="info">
-              <div class="camera-tracking-chips" aria-label="สถานะภาพกล้อง"><span id="camera-face-chip" data-found="false">○ ยังไม่พบใบหน้า</span><span id="camera-hand-chip" data-found="false">○ ยังไม่พบมือ</span></div>
-              <p id="camera-guidance" role="status" aria-live="polite">กำลังตรวจตำแหน่งใบหน้าและมือ…</p>
-              <small>เมื่อต้องการทำคำเดิมซ้ำ ให้ลดมือลงสักครู่แล้วเริ่มท่าใหม่</small>
+            <div class="card-heading"><div><span class="eyebrow">CAMERA</span><h2>ตรวจจับท่าทาง</h2></div></div>
+            <div class="camera-wrap">
+              <video id="camera-video" autoplay muted playsinline></video>
+              <div id="camera-placeholder" class="camera-placeholder">แตะ “เปิดกล้อง” เพื่อเริ่มแปล</div>
+              <div class="camera-status-overlay">
+                <div class="camera-overlay-heading"><div class="camera-live-label" aria-hidden="true"><i></i> CAMERA</div><span class="video-count" id="camera-status">ปิดกล้อง</span></div>
+                <div id="gesture-live-caption" class="gesture-live-caption" hidden></div>
+                <div id="camera-framing" class="camera-framing" hidden data-level="info">
+                  <div class="camera-tracking-chips" aria-label="สถานะภาพกล้อง"><span id="camera-face-chip" data-found="false">○ ยังไม่พบใบหน้า</span><span id="camera-hand-chip" data-found="false">○ ยังไม่พบมือ</span></div>
+                  <p id="camera-guidance" role="status" aria-live="polite">กำลังตรวจตำแหน่งใบหน้าและมือ…</p>
+                </div>
+              </div>
             </div>
+            <div class="camera-controls"><button id="camera-start" class="primary" type="button">เปิดกล้อง</button><button id="camera-stop" class="secondary" type="button" hidden>ปิดกล้อง</button></div>
+
+            <p class="camera-repeat-note">เมื่อต้องการทำคำเดิมซ้ำ ให้ลดมือลงสักครู่แล้วเริ่มท่าใหม่</p>
             <p class="camera-note">ภาพประมวลผลบนอุปกรณ์และไม่ส่งออกไป; MediaPipe อาจส่งสถิติการใช้งานให้ Google</p>
           </article>
         </div>
