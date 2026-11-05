@@ -30,4 +30,39 @@ body{background:#f4f8fc;background-image:radial-gradient(ellipse at 85% 0%,#e2ef
 
 .practice-start-badge{background:#ffe066;color:#173758;border:1px solid #ffedab;padding:7px 12px;font-size:13px;font-weight:600;line-height:1.5;box-shadow:0 3px 10px #0b2b6a20}
 
+.practicing .camera-card {
+  display: flex;
+  flex-direction: column;
+}
+.practicing .camera-card > :is(.card-heading, .camera-readable-status) {
+  order: -2;
+}
+.practicing .camera-framing {
+  order: -1;
+  margin: 0 0 14px;
+}
+.practicing .camera-framing p {
+  font-size: clamp(14px, 1.8vw, 17px);
+  font-weight: 500;
+}
+.practicing .camera-framing small {
+  display: none;
+}
+.practice-hold {
+  margin-top: 8px;
+  color: #174977;
+}
+.practice-hold-time {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.practice-hold progress {
+  display: block;
+  width: 100%;
+  height: 12px;
+  accent-color: #2868c7;
+}
+
 .gesture-audio-help{margin:15px 0 0;color:#63788e;font-size:11px;line-height:1.8}

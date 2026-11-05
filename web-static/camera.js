@@ -29,6 +29,8 @@ const state = {
 const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
 const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const ME_HOLD_MS = 1500;
+const ME_HOLD_SECONDS = (ME_HOLD_MS / 1000).toFixed(1);
 const ANGRY_TOUCH_THRESHOLD = 0.12;
 const ANGRY_PULL_THRESHOLD = 0.15;
 const ANGRY_TIMEOUT_MS = 2000;
@@ -46,6 +48,7 @@ window.addEventListener('practice-settings-changed', (event) => {
   practice.active = Boolean(event.detail.active); practice.word = event.detail.word || '';
   practice.matched = false; practice.awaitNeutral = practice.active; practice.neutralSince = null;
   resetRecognitionState();
+  if (!framingPanel.hidden) renderCameraGuidance();
 });
 function announce(word, now, minimumInterval = 2200) {
   if (practice.active && (practice.matched || practice.awaitNeutral || word !== practice.word)) return false;
@@ -271,7 +274,7 @@ function detectMe(points, face, now, arms) {
       if (!state.meSince || !state.meAnchor || handMetricDistance(points[0], state.meAnchor) > hand.palm * .85) {
         state.meSince = now; state.meAnchor = { ...points[0] };
       }
-      if (now - state.meSince >= 1500) {
+      if (now - state.meSince >= ME_HOLD_MS) {
         announce('ฉัน', now);
         state.meSince = 0;
         state.meLatched = true;
@@ -484,7 +487,7 @@ function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
         window.dispatchEvent(new CustomEvent('practice-ready'));
       }
     } else practice.neutralSince = null;
-    return 'โหมดฝึก: ลดมือให้พ้นภาพสักครู่ก่อนเริ่มท่าใหม่';
+    return 'เตรียมเริ่มท่าใหม่';
   }
   if (practice.active && practice.matched) return 'ฝึกสำเร็จแล้ว · กดฝึกอีกครั้งหรือเลือกคำถัดไป';
 
@@ -513,7 +516,7 @@ function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
 
   if (state.lastWord && now - state.lastWordAt < 1500) state.prompt = `ตรวจพบ: ${state.lastWord}`;
   else if (loveActive && !loveHold.latched) state.prompt = 'ท่ารัก: วางสองมือไขว้ที่อกแล้วค้างสักครู่';
-  else if (state.meSince && !state.meLatched) state.prompt = `ท่าฉัน: ค้างมือที่อกอีก ${Math.max(0, (1500 - (now - state.meSince)) / 1000).toFixed(1)} วินาที`;
+  else if (state.meSince && !state.meLatched) state.prompt = `ท่าฉัน: ค้างมือที่อกอีก ${Math.max(0, (ME_HOLD_MS - (now - state.meSince)) / 1000).toFixed(1)} วินาที`;
   else if (helloActive && !helloState.latched) state.prompt = 'ท่าสวัสดี: พนมมือแล้วก้มศีรษะไหว้';
   else if (addedSigns.hungryStage > 0) state.prompt = 'ท่าหิว: งอนิ้วชี้เข้าบริเวณลำคอ';
   else if (addedSigns.heSince && !addedSigns.heLatched && now - addedSigns.heLastValid <= 400) state.prompt = 'ท่าเขา: ยื่นมือออกด้านข้างเล็กน้อย';
@@ -523,13 +526,18 @@ function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
   } else state.prompt = 'กำลังตรวจจับท่าที่รองรับ';
   if (practice.active) {
     if (practice.matched) return `ตรวจพบท่า “${practice.word}” แล้ว · ฝึกสำเร็จ`;
-    const holdingMe = practice.word === 'ฉัน' && state.meSince && !state.meLatched;
-    return holdingMe ? state.prompt : `กำลังฝึกคำ “${practice.word}” · ทำท่าตามคลิปตัวอย่าง`;
+    return `กำลังฝึกคำ “${practice.word}”`;
   }
   return state.prompt;
 }
 
-const framingState = { pending: '', since: 0, shown: '' };
+const framingPanel = document.getElementById('camera-framing');
+const guidance = document.getElementById('camera-guidance');
+const holdPanel = document.getElementById('practice-hold');
+const holdBar = document.getElementById('practice-hold-bar');
+const holdTime = document.getElementById('practice-hold-time');
+const initialGuidance = { key: '', level: 'info', message: 'กำลังตรวจใบหน้า มือ และช่วงอก…' };
+const framingState = { pending: '', since: 0, shown: initialGuidance };
 function chestVisible(pose) {
   if (!pose || !pose[11] || !pose[12]) return false;
   const shoulders = [pose[11], pose[12]];
@@ -551,9 +559,35 @@ function framingFeedback(handsResult, faceResult, poseResult, now = 0) {
   if (!chestVisible(poseResult?.landmarks?.[0])) return { key: 'body', level: 'info', message: 'ยังไม่เห็นช่วงอกชัดเจน · ถอยออกหรือปรับกล้องให้เห็นไหล่ทั้งสองข้างและลำตัวช่วงอก' };
   return { key: 'ready', level: 'ready', message: 'เห็นใบหน้า มือ และช่วงอกแล้ว · ทำท่าตามคลิปตัวอย่างได้เลย' };
 }
+function practiceGuidance(feedback, holdingMe) {
+  if (practice.matched) return { level: 'ready', message: 'ทำท่าสำเร็จแล้ว · เลือกฝึกอีกครั้งหรือไปคำถัดไปได้เลย' };
+  if (practice.awaitNeutral) return { level: 'info', message: 'ลดมือให้พ้นภาพสักครู่ แล้วค่อยเริ่มทำท่า' };
+  if (holdingMe) return { level: 'ready', message: 'เริ่มนับแล้ว · ค้างมือที่อกให้นิ่งจนแถบเต็ม' };
+  if (practice.word === 'ฉัน' && (feedback.key === 'ready' || feedback.key === 'body' && !poseTask)) {
+    return { level: 'info', message: `วางมือขวาที่อก เหยียดนิ้วให้ชิดกัน แล้วค้างไว้ ${ME_HOLD_SECONDS} วินาที` };
+  }
+  return feedback;
+}
+
+function renderCameraGuidance(now) {
+  const showHold = practice.active && practice.word === 'ฉัน' && !practice.awaitNeutral;
+  const holdMs = practice.matched ? ME_HOLD_MS : state.meSince ? state.meLastValid - state.meSince : 0;
+  const holdingMe = showHold && state.meSince > 0 && state.meLastValid === now;
+  const feedback = practice.active ? practiceGuidance(framingState.shown, holdingMe) : framingState.shown;
+  framingPanel.dataset.level = feedback.level;
+  if (guidance.textContent !== feedback.message) guidance.textContent = feedback.message;
+
+  holdPanel.hidden = !showHold;
+  holdBar.value = showHold ? holdMs / ME_HOLD_MS : 0;
+  if (showHold) {
+    const seconds = (Math.floor(holdMs / 100) / 10).toFixed(1);
+    const time = `${seconds} / ${ME_HOLD_SECONDS} วินาที`;
+    if (holdTime.textContent !== time) holdTime.textContent = time;
+  }
+}
+
 function updateFramingGuidance(handsResult, faceResult, poseResult, now) {
-  const panel = document.getElementById('camera-framing');
-  panel.hidden = false;
+  framingPanel.hidden = false;
   const faceSeen = Boolean(faceResult.faceLandmarks?.length);
   const handCount = handsResult.landmarks?.length || 0;
   const faceChip = document.getElementById('camera-face-chip');
@@ -569,11 +603,10 @@ function updateFramingGuidance(handsResult, faceResult, poseResult, now) {
   const feedback = framingFeedback(handsResult, faceResult, poseResult, now);
   if (feedback.key !== framingState.pending) { framingState.pending = feedback.key; framingState.since = now; }
   // Avoid flashing warnings during a bow or brief tracking loss.
-  if (framingState.shown !== feedback.key && now - framingState.since >= 550) {
-    framingState.shown = feedback.key;
-    panel.dataset.level = feedback.level;
-    document.getElementById('camera-guidance').textContent = feedback.message;
+  if (framingState.shown.key !== feedback.key && now - framingState.since >= 550) {
+    framingState.shown = feedback;
   }
+  renderCameraGuidance(now);
 }
 
 async function loadModels() {
@@ -620,8 +653,7 @@ function inferFrame() {
 async function startCamera() {
   startButton.disabled = true;
   cameraWrap.dataset.cameraState = 'loading';
-  framingState.pending = ''; framingState.shown = ''; framingState.since = 0;
-  document.getElementById('camera-guidance').textContent = 'กำลังตรวจใบหน้า มือ และช่วงอก…';
+  framingState.pending = ''; framingState.shown = initialGuidance; framingState.since = 0;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
     camera.srcObject = stream;
@@ -658,7 +690,7 @@ function stopCamera() {
   startButton.hidden = false; startButton.disabled = false; stopButton.hidden = true; badge.textContent = 'ปิดกล้อง';
   resetRecognitionState();
   lastPoseResult = null; lastPoseAt = -Infinity;
-  document.getElementById('camera-framing').hidden = true;
+  framingPanel.hidden = true;
 }
 
 const cameraSetupDialog = document.getElementById('camera-setup-dialog');

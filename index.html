@@ -110,6 +110,10 @@
             <div id="camera-framing" class="camera-framing" hidden data-level="info">
               <div class="camera-tracking-chips" aria-label="สถานะภาพกล้อง"><span id="camera-face-chip" data-found="false">○ ยังไม่พบใบหน้า</span><span id="camera-hand-chip" data-found="false">○ ยังไม่พบมือ</span><span id="camera-chest-chip" data-found="false">○ ยังไม่เห็นช่วงอกชัดเจน</span></div>
               <p id="camera-guidance" role="status" aria-live="polite">กำลังตรวจใบหน้า มือ และช่วงอก…</p>
+              <div id="practice-hold" class="practice-hold" hidden>
+                <span id="practice-hold-time" class="practice-hold-time"></span>
+                <progress id="practice-hold-bar" max="1" value="0" aria-label="เวลาที่ค้างมือสำหรับท่าฉัน"></progress>
+              </div>
               <small>เมื่อต้องการทำคำเดิมซ้ำ ให้ลดมือลงสักครู่แล้วเริ่มท่าใหม่</small>
             </div>
             <p class="camera-note">ภาพประมวลผลบนอุปกรณ์และไม่ส่งออกไป; MediaPipe อาจส่งสถิติการใช้งานให้ Google</p>
