@@ -99,7 +99,7 @@
     <section id="gesture-system" class="system-panel" role="tabpanel" aria-labelledby="gesture-tab" hidden>
       <header class="system-heading"><span class="eyebrow">GESTURE SYSTEM</span><h2>จับท่าทางภาษามือ</h2><p>เปิดกล้องเพื่อแปลท่าที่รองรับเป็นเสียง และต่อคำเป็นประโยค</p></header>
       <div class="gesture-mode-switch" role="group" aria-label="เลือกโหมดจับท่าทาง"><button id="translation-mode" class="active" type="button" aria-pressed="true">แปลเป็นประโยค</button><button id="practice-mode" type="button" aria-pressed="false">◎ ฝึกทีละคำ</button></div>
-      <p class="gesture-use-guide"><strong>ก่อนเริ่มใช้:</strong> ตั้งกล้องให้เห็นใบหน้า มือ และลำตัวช่วงอกชัดเจน ขณะทำท่าให้ใช้มือข้างเดียวทีละท่า <strong>ยกเว้นท่า “รัก” และ “สวัสดี” ที่ใช้สองมือของผู้ทำท่าคนเดียวกัน</strong></p>
+      <p class="gesture-use-guide"><strong>ก่อนเริ่มใช้:</strong> ตั้งกล้องให้เห็นใบหน้า มือ และลำตัวช่วงอกชัดเจน ขณะทำท่าให้ใช้มือข้างเดียวทีละท่า <strong>ยกเว้นท่า “รัก” “สวัสดี” และ “สบายดี” ที่ใช้สองมือของผู้ทำท่าคนเดียวกัน</strong></p>
       <div class="layout gesture-layout">
         <div class="left-column">
           <article class="card camera-card">
@@ -155,6 +155,8 @@
               <article class="gesture-clip-card"><h3>เขา</h3><div class="gesture-clip-frame"><video class="gesture-reference-video" src="/web-static/videos/%E0%B9%80%E0%B8%82%E0%B8%B2.mp4" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างท่าเขา"></video><button class="gesture-clip-play" type="button" aria-label="เล่นคลิปท่าเขา">▶</button><button class="gesture-clip-expand" type="button" aria-label="ขยายคลิปท่าเขา">⛶</button></div></article>
               <article class="gesture-clip-card"><h3>หิว</h3><div class="gesture-clip-frame"><video class="gesture-reference-video" src="/web-static/videos/%E0%B8%AB%E0%B8%B4%E0%B8%A7.mp4" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างท่าหิว"></video><button class="gesture-clip-play" type="button" aria-label="เล่นคลิปท่าหิว">▶</button><button class="gesture-clip-expand" type="button" aria-label="ขยายคลิปท่าหิว">⛶</button></div></article>
               <article class="gesture-clip-card"><h3>สวัสดี</h3><div class="gesture-clip-frame"><video class="gesture-reference-video" src="/web-static/videos/%E0%B8%AA%E0%B8%A7%E0%B8%B1%E0%B8%AA%E0%B8%94%E0%B8%B5.mp4" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างท่าสวัสดี"></video><button class="gesture-clip-play" type="button" aria-label="เล่นคลิปท่าสวัสดี">▶</button><button class="gesture-clip-expand" type="button" aria-label="ขยายคลิปท่าสวัสดี">⛶</button></div></article>
+              <article class="gesture-clip-card"><h3>อิ่ม</h3><div class="gesture-clip-frame"><video class="gesture-reference-video" src="/web-static/videos/%E0%B8%AD%E0%B8%B4%E0%B9%88%E0%B8%A1.mp4" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างท่าอิ่ม"></video><button class="gesture-clip-play" type="button" aria-label="เล่นคลิปท่าอิ่ม">▶</button><button class="gesture-clip-expand" type="button" aria-label="ขยายคลิปท่าอิ่ม">⛶</button></div></article>
+              <article class="gesture-clip-card"><h3>สบายดี</h3><div class="gesture-clip-frame"><video class="gesture-reference-video" src="/web-static/videos/%E0%B8%AA%E0%B8%9A%E0%B8%B2%E0%B8%A2%E0%B8%94%E0%B8%B5.mp4" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างท่าสบายดี"></video><button class="gesture-clip-play" type="button" aria-label="เล่นคลิปท่าสบายดี">▶</button><button class="gesture-clip-expand" type="button" aria-label="ขยายคลิปท่าสบายดี">⛶</button></div></article>
             </div>
             <p class="note">หลังตรวจพบท่าล่าสุด ระบบรอประมาณ 2.25 วินาทีก่อนพูด เพื่อให้มีเวลาต่อคำเป็นประโยค</p>
           </article>
@@ -169,7 +171,7 @@
     <ol class="camera-setup-steps">
       <li><strong>เห็นใบหน้า มือ และลำตัวช่วงอกครบ</strong><span>ตั้งกล้องตรงหน้า ให้มีแสงเพียงพอ และเว้นระยะให้ขยับมือได้โดยไม่หลุดออกจากภาพ</span></li>
       <li><strong>ทำท่าครั้งละหนึ่งคน</strong><span>ให้มีเฉพาะใบหน้าและมือของผู้ทำท่าอยู่ในกล้อง หลีกเลี่ยงมือหรือใบหน้าของผู้อื่นเข้ามาในภาพ เพราะอาจทำให้ตรวจจับคลาดเคลื่อน</span></li>
-      <li><strong>ใช้มือขวาเป็นหลัก</strong><span>ทำทีละท่าตามคลิปตัวอย่าง ท่า “รัก” และ “สวัสดี” ให้ใช้สองมือของผู้ทำท่าคนเดียวกัน</span></li>
+      <li><strong>ใช้มือขวาเป็นหลัก</strong><span>ทำทีละท่าตามคลิปตัวอย่าง ท่า “รัก” “สวัสดี” และ “สบายดี” ให้ใช้สองมือของผู้ทำท่าคนเดียวกัน</span></li>
     </ol>
     <div class="welcome-actions"><button id="camera-setup-cancel" class="secondary" type="button">กลับไปก่อน</button><button id="camera-setup-confirm" class="primary" type="button" autofocus>พร้อมแล้ว เปิดกล้อง</button></div>
   </dialog>
