@@ -805,6 +805,7 @@ function updatePracticeLesson() {
   const lesson = practiceLessons.find((item) => item.word === el('practice-word').value);
   if (!lesson) return;
   const video = el('practice-video'); video.pause(); video.src = lesson.src; video.load();
+  el('practice-play').textContent = '▶ ดูคลิปตัวอย่าง';
   video.setAttribute('aria-label', `คลิปตัวอย่างท่า${lesson.label}`);
   document.querySelector('.camera-card h2').textContent = practiceMode ? `ฝึกท่า “${lesson.label}”` : 'ตรวจจับท่าทาง';
   resetPracticeAttempt();
@@ -860,7 +861,9 @@ el('practice-next').addEventListener('click', () => {
 el('practice-play').addEventListener('click', () => {
   const video = el('practice-video');
   if (!video.paused) video.pause();
-  else video.play().catch(() => practiceResult('ยังเล่นคลิปไม่ได้', 'ลองกดดูคลิปอีกครั้ง หรือเลือกคำใหม่'));
+  else video.play().catch((error) => {
+    if (error.name !== 'AbortError') practiceResult('ยังเล่นคลิปไม่ได้', 'ลองกดดูคลิปอีกครั้ง หรือเลือกคำใหม่');
+  });
 });
 el('practice-video').addEventListener('play', () => { el('practice-play').textContent = 'Ⅱ หยุดคลิปตัวอย่าง'; });
 el('practice-video').addEventListener('pause', () => { el('practice-play').textContent = '▶ ดูคลิปตัวอย่าง'; });
