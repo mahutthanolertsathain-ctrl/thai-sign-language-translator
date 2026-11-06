@@ -90,6 +90,8 @@ function resetRecognitionState() {
   resetWellState();
   resetUncleMotion();
   resetCryMotion();
+  resetChildMotion();
+  resetSmileMotion();
   resetHelloState();
   loveHold.latched = false; loveHold.lastValid = 0;
   sickHold.latched = false; sickHold.lastValid = 0;
@@ -385,6 +387,133 @@ function detectFaceSigns(points, face, now) {
   }
   resetCryMotion();
   return false;
+}
+
+const childMotion = { stage: '', anchor: null, since: 0, lastValid: 0, side: 0, latched: false };
+
+function resetChildMotion() {
+  Object.assign(childMotion, { stage: '', anchor: null, since: 0, lastValid: 0, side: 0, latched: false });
+}
+
+function palmNormalY(points, aspect) {
+  const [wrist, index, pinky] = [points[0], points[5], points[17]];
+  const a = { x: (index.x - wrist.x) * aspect, y: index.y - wrist.y, z: (index.z - wrist.z) * aspect };
+  const b = { x: (pinky.x - wrist.x) * aspect, y: pinky.y - wrist.y, z: (pinky.z - wrist.z) * aspect };
+  const x = a.y * b.z - a.z * b.y;
+  const y = a.z * b.x - a.x * b.z;
+  const z = a.x * b.y - a.y * b.x;
+  return Math.abs(y) / Math.hypot(x, y, z);
+}
+
+// A flat hand dips, rises and dips again below the face.
+function detectChild(points, face, now) {
+  if (now - childMotion.lastValid > 700 || (!childMotion.latched && now - childMotion.since > 1900)) resetChildMotion();
+  if (!points || !face) return false;
+
+  const aspect = frameCanvas.width / frameCanvas.height;
+  const mouth = face[13], wrist = points[0], middle = points[12];
+  const faceWidth = Math.abs(face[234].x - face[454].x);
+  const scale = faceWidth * aspect;
+  const palm = handMetricDistance(wrist, points[9]);
+  if (faceWidth < .02 || palm < .015) return false;
+  const wristOffset = (wrist.x - mouth.x) / faceWidth;
+  const side = Math.sign(wristOffset);
+  const offset = (middle.y - mouth.y) / scale;
+  if (Math.abs(wristOffset) < .68 || Math.abs(wristOffset) > 2.65 || offset < 1.25 || offset > 3.55) {
+    resetChildMotion();
+    return false;
+  }
+  if (side !== childMotion.side) resetChildMotion();
+  // An individual frame can lose the finger shape during a quick dip.
+  if (!flatFingers(points, palm)) return false;
+  childMotion.lastValid = now;
+  childMotion.side = side;
+  if (childMotion.latched) {
+    if (offset >= 2.24) return true;
+    resetChildMotion();
+    return false;
+  }
+
+  const sample = { offset, wristY: wrist.y };
+  const towardMiddle = side * (wrist.x - middle.x) * aspect;
+  const level = palmNormalY(points, aspect);
+  const raised = towardMiddle > palm * .85 && level > .44 && offset < 2.28;
+  const low = offset >= 2.24 && towardMiddle > palm * .85 && level > .4;
+  if (!childMotion.anchor) {
+    if (!raised && !low) return false;
+    childMotion.stage = raised ? 'first-press' : 'lift';
+    childMotion.anchor = sample;
+    childMotion.since = now;
+    return false;
+  }
+
+  const anchor = childMotion.anchor;
+  if (childMotion.stage === 'lift') {
+    if (raised && anchor.offset - offset >= .32 && anchor.wristY - wrist.y >= scale * .15) {
+      childMotion.stage = 'second-press';
+      childMotion.anchor = sample;
+    } else if (offset > anchor.offset) childMotion.anchor = sample;
+  } else if (offset - anchor.offset >= .34 && wrist.y - anchor.wristY >= scale * .15) {
+    if (childMotion.stage === 'second-press') {
+      childMotion.latched = announce('เด็ก', now);
+      return true;
+    }
+    childMotion.stage = 'lift';
+    childMotion.anchor = sample;
+  } else if (raised && offset < anchor.offset) childMotion.anchor = sample;
+  return false;
+}
+
+const smileMotion = { start: null, lastValid: 0, finishSince: 0, latched: false };
+
+function resetSmileMotion() {
+  Object.assign(smileMotion, { start: null, lastValid: 0, finishSince: 0, latched: false });
+}
+
+// Both hands move from the middle of the mouth out toward the cheeks.
+function detectSmile(hands, face, now) {
+  if (now - smileMotion.lastValid > 550) resetSmileMotion();
+  if (hands.length !== 2 || !face) return false;
+  const aspect = frameCanvas.width / frameCanvas.height;
+  const mouth = face[13], faceWidth = Math.abs(face[234].x - face[454].x);
+  const scale = faceWidth * aspect;
+  if (faceWidth < .02) return false;
+  const [left, right] = hands[0][0].x < hands[1][0].x ? hands : [hands[1], hands[0]];
+  const fingerNearMouth = (points, side) => {
+    const wrist = points[0], middle = points[12];
+    const palm = handMetricDistance(wrist, points[9]);
+    const wristX = side * (wrist.x - mouth.x) / faceWidth;
+    const tipX = side * (middle.x - mouth.x) / faceWidth;
+    return palm > .015 && wristX > .68 && wristX < 2.15 && tipX > -.17 && tipX < .95
+      && side * (wrist.x - middle.x) * aspect > palm * .85
+      && Math.abs(middle.y - mouth.y) < scale * .63
+      && points[4].y - points[9].y > -palm * .22 && flatFingers(points, palm);
+  };
+  if (!fingerNearMouth(left, -1) || !fingerNearMouth(right, 1)) {
+    smileMotion.finishSince = 0;
+    return false;
+  }
+  smileMotion.lastValid = now;
+  if (smileMotion.latched) return true;
+
+  const leftOffset = (mouth.x - left[12].x) / faceWidth;
+  const rightOffset = (right[12].x - mouth.x) / faceWidth;
+  const gap = leftOffset + rightOffset;
+  if (smileMotion.start && now - smileMotion.start.at > 1450) smileMotion.start = null;
+  if (leftOffset < .46 && rightOffset < .46 && gap < .69 && (!smileMotion.start || gap < smileMotion.start.gap)) {
+    smileMotion.start = { leftOffset, rightOffset, gap, at: now };
+  }
+  const start = smileMotion.start;
+  const atCheeks = start && leftOffset > .33 && rightOffset > .33
+    && leftOffset - start.leftOffset >= .13 && rightOffset - start.rightOffset >= .13 && gap - start.gap >= .37;
+  if (!atCheeks) {
+    smileMotion.finishSince = 0;
+    return false;
+  }
+  smileMotion.finishSince ||= now;
+  if (now - smileMotion.finishSince < 120) return false;
+  smileMotion.latched = announce('ยิ้ม', now);
+  return true;
 }
 
 // The greeting reference is palms together followed by a bow. A hand can
@@ -705,9 +834,12 @@ function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
   const helloActive = detectHello(hands, face, now);
   const wellActive = detectWell(helloActive ? [] : hands, face, now);
   const loveActive = !helloActive && !wellActive && detectLove(hands, handsResult, face, now, arms);
-  const bothHandsActive = helloActive || wellActive || loveActive;
-  const faceSignActive = detectFaceSigns(!bothHandsActive && hands.length === 1 ? hands[0] : null, face, now);
-  const otherSignActive = bothHandsActive || faceSignActive;
+  const smileActive = detectSmile(helloActive || wellActive || loveActive ? [] : hands, face, now);
+  const bothHandsActive = helloActive || wellActive || loveActive || smileActive;
+  const singleHand = !bothHandsActive && hands.length === 1 ? hands[0] : null;
+  const faceSignActive = detectFaceSigns(singleHand, face, now);
+  const childActive = detectChild(faceSignActive ? null : singleHand, face, now);
+  const otherSignActive = bothHandsActive || faceSignActive || childActive;
   if (helloActive || wellActive) { state.loveSince = 0; if (now - loveHold.lastValid > 600) loveHold.latched = false; }
   if (!otherSignActive && hands.length === 1 && face) {
     lastSingleAt = now;
