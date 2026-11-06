@@ -88,6 +88,8 @@ function resetRecognitionState() {
   resetAddedSigns();
   resetFullState();
   resetWellState();
+  resetUncleMotion();
+  resetCryMotion();
   resetHelloState();
   loveHold.latched = false; loveHold.lastValid = 0;
   sickHold.latched = false; sickHold.lastValid = 0;
@@ -276,6 +278,112 @@ function detectWell(hands, face, now) {
       && Math.abs(left[9].y - right[9].y) < faceScale * .65) {
     wellState.chestAt = now;
   }
+  return false;
+}
+
+const uncleMotion = { samples: [], side: 0, lastValid: 0, latched: false };
+const cryMotion = { start: null, lastValid: 0, latched: false };
+
+function resetUncleMotion() {
+  uncleMotion.samples = [];
+  uncleMotion.side = 0;
+  uncleMotion.lastValid = 0;
+  uncleMotion.latched = false;
+}
+
+function resetCryMotion() {
+  cryMotion.start = null;
+  cryMotion.lastValid = 0;
+  cryMotion.latched = false;
+}
+
+function reversesDirection(from, turn, to, axis, scale) {
+  const out = turn[axis] - from[axis];
+  const back = to[axis] - turn[axis];
+  const rawAxis = axis === 'x' ? 'rawX' : 'rawY';
+  return out * back < 0 && Math.min(Math.abs(out), Math.abs(back)) >= .16
+    && Math.sign(out) * (turn[rawAxis] - from[rawAxis]) >= scale * .11
+    && Math.sign(back) * (to[rawAxis] - turn[rawAxis]) >= scale * .11;
+}
+
+// The L stays open while the hand moves back and forth beside the temple.
+function detectUncleMotion(index, wrist, nose, faceWidth, faceScale, side, now) {
+  if (uncleMotion.side !== side) resetUncleMotion();
+  uncleMotion.side = side;
+  uncleMotion.lastValid = now;
+  if (uncleMotion.latched) return true;
+
+  const sample = {
+    x: (index.x - nose.x) / faceWidth, y: (wrist.y - nose.y) / faceScale,
+    rawX: index.x, rawY: wrist.y, at: now
+  };
+  const recent = uncleMotion.samples.filter(previous => now - previous.at <= 1600);
+  // Check movement in the image as well as relative to the face.
+  const reversed = recent.some((turn, index) => recent.slice(0, index).some(from =>
+    reversesDirection(from, turn, sample, 'x', faceWidth)
+    || reversesDirection(from, turn, sample, 'y', faceScale)));
+  recent.push(sample);
+  uncleMotion.samples = recent;
+  if (reversed) uncleMotion.latched = announce('ลุง', now);
+  return reversed;
+}
+
+// Two extended fingers start by the eye and move down the face together.
+function detectCryMotion(tips, face, faceWidth, faceScale, now) {
+  const nose = face[1];
+  const offset = (tips.y - nose.y) / faceScale;
+  const x = (tips.x - nose.x) / faceWidth;
+  if (cryMotion.start && now - cryMotion.start.at > 2300) cryMotion.start = null;
+  if (offset < -.2 && [face[133], face[362]].some(eye => handMetricDistance(tips, eye) < faceScale * .45)) {
+    if (!cryMotion.start || offset < cryMotion.start.offset) cryMotion.start = { offset, x, y: tips.y, at: now };
+  }
+  const start = cryMotion.start;
+  if (start && now - start.at >= 200 && offset >= -.05
+      && offset - start.offset >= .36 && tips.y - start.y >= faceScale * .28
+      && Math.abs(x - start.x) < .42) {
+    cryMotion.latched = announce('ร้องไห้', now);
+    return true;
+  }
+  return false;
+}
+
+function detectFaceSigns(points, face, now) {
+  if (now - uncleMotion.lastValid > 480) resetUncleMotion();
+  if (now - cryMotion.lastValid > 480) resetCryMotion();
+  if (!points || !face) return false;
+
+  const aspect = frameCanvas.width / frameCanvas.height;
+  const faceWidth = Math.abs(face[234].x - face[454].x);
+  const faceScale = faceWidth * aspect;
+  const palm = handMetricDistance(points[0], points[9]);
+  if (faceWidth < .02 || palm < .015) return false;
+  const nose = face[1], index = points[8], middle = points[12], thumb = points[4];
+  const side = Math.sign(index.x - nose.x);
+  const indexX = Math.abs(index.x - nose.x) / faceWidth;
+  const indexY = (index.y - nose.y) / faceScale;
+  const upright = points[5].y - index.y > palm * .4;
+  const [indexAngle, middleAngle, ringAngle, pinkyAngle] = [8, 12, 16, 20].map(tip => fingerBendAngle(points, tip));
+  const fingersFolded = ringAngle < 120 && pinkyAngle < 120;
+  const lShape = upright && indexAngle > 150 && middleAngle < 110 && fingersFolded
+    && side * (points[2].x - thumb.x) * aspect > palm * .34
+    && Math.abs(thumb.y - points[2].y) < palm * .5;
+  const thumbNearCheek = [face[50], face[280]].some(cheek => handMetricDistance(cheek, thumb) < faceScale * .30);
+  if (lShape && indexX > .38 && indexX < 1.28 && indexY > -.95 && indexY < .12 && !thumbNearCheek) {
+    resetCryMotion();
+    return detectUncleMotion(index, points[0], nose, faceWidth, faceScale, side, now);
+  }
+  resetUncleMotion();
+
+  const separation = handMetricDistance(index, middle);
+  const tips = { x: (index.x + middle.x) / 2, y: (index.y + middle.y) / 2 };
+  const tipY = (tips.y - nose.y) / faceScale;
+  const vShape = upright && indexAngle > 145 && middleAngle > 145 && fingersFolded
+    && separation > palm * .24 && separation < palm * .95 && Math.abs(index.y - middle.y) < palm * .48;
+  if (vShape && Math.abs(tips.x - nose.x) < faceWidth * .55 && tipY > -.95 && tipY < .66) {
+    cryMotion.lastValid = now;
+    return cryMotion.latched || detectCryMotion(tips, face, faceWidth, faceScale, now);
+  }
+  resetCryMotion();
   return false;
 }
 
@@ -598,8 +706,10 @@ function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
   const wellActive = detectWell(helloActive ? [] : hands, face, now);
   const loveActive = !helloActive && !wellActive && detectLove(hands, handsResult, face, now, arms);
   const bothHandsActive = helloActive || wellActive || loveActive;
+  const faceSignActive = detectFaceSigns(!bothHandsActive && hands.length === 1 ? hands[0] : null, face, now);
+  const otherSignActive = bothHandsActive || faceSignActive;
   if (helloActive || wellActive) { state.loveSince = 0; if (now - loveHold.lastValid > 600) loveHold.latched = false; }
-  if (!bothHandsActive && hands.length === 1 && face) {
+  if (!otherSignActive && hands.length === 1 && face) {
     lastSingleAt = now;
     const points = hands[0];
     const hungryActive = detectHungry(points, face, now);
@@ -609,17 +719,18 @@ function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
     const heActive = !fullActive && detectHe(points, face, now);
     if (hungryActive || fullActive || heActive) resetSingleHandState();
     else { detectMe(points, face, now, arms); detectParents(points, face, now); }
-  } else if (!bothHandsActive && arms?.singleRaised && face && hands.length === 2) {
+  } else if (!otherSignActive && arms?.singleRaised && face && hands.length === 2) {
     lastSingleAt = now;
     const points = [...hands].sort((a, b) => handMetricDistance(a[0], arms.singleRaised) - handMetricDistance(b[0], arms.singleRaised))[0];
     detectMe(points, face, now, arms);
-  } else if (bothHandsActive || hands.length > 1 || now - lastSingleAt > 500) {
+  } else if (otherSignActive || hands.length > 1 || now - lastSingleAt > 500) {
     resetSingleHandState(); resetAddedSigns(); resetFullState();
   }
-  if (!bothHandsActive) { detectAngry(hands, face, now); detectSick(hands, handsResult, face, now); }
+  if (!otherSignActive) { detectAngry(hands, face, now); detectSick(hands, handsResult, face, now); }
+  if (faceSignActive) { state.angryStage = 0; state.sickStage = 0; state.sickHoldSince = 0; }
 
-  const sosActive = !bothHandsActive && detectHelpSOS(hands, now);
-  if (bothHandsActive) { state.sosStage = 0; state.sosHoldSince = 0; }
+  const sosActive = !otherSignActive && detectHelpSOS(hands, now);
+  if (otherSignActive) { state.sosStage = 0; state.sosHoldSince = 0; }
 
   if (state.lastWord && now - state.lastWordAt < 1500) state.prompt = `ตรวจพบ: ${state.lastWord}`;
   else if (loveActive && !loveHold.latched) state.prompt = 'ท่ารัก: วางสองมือไขว้ที่อกแล้วค้างสักครู่';
