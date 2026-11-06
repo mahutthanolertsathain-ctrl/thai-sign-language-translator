@@ -90,7 +90,8 @@ function resetRecognitionState() {
   resetWellState();
   resetUncleMotion();
   resetCryMotion();
-  resetChildMotion();
+  resetFearMotion();
+  resetDislikeMotion();
   resetSmileMotion();
   resetHelloState();
   loveHold.latched = false; loveHold.lastValid = 0;
@@ -132,13 +133,14 @@ function detectHe(points, face, now) {
   const aspect = frameCanvas.width / frameCanvas.height;
   const palm = handMetricDistance(points[0], points[9]);
   const faceWidth = Math.abs(face[234].x - face[454].x);
-  const offset = Math.abs(points[9].x - face[152].x) * aspect;
+  const palmOffset = points[9].x - face[152].x;
+  const offset = Math.abs(palmOffset) * aspect;
   const angles = [8, 12, 16, 20].map((tip) => fingerBendAngle(points, tip));
   const fourExtended = angles.slice(0, 3).every((angle) => angle > 140) && angles[3] > 130;
   const fingersTogether = [8, 12, 16].every((tip) => handMetricDistance(points[tip], points[tip + 4]) < palm * .75);
-  const sideways = Math.abs(points[8].x - points[0].x) * aspect > palm * .45;
+  const outward = Math.sign(palmOffset) * (points[8].x - points[0].x) * aspect > palm * .45;
   const belowFace = points[5].y > face[152].y + faceWidth * aspect * .25;
-  const pose = palm > .015 && faceWidth > .02 && fourExtended && fingersTogether && sideways && belowFace
+  const pose = palm > .015 && faceWidth > .02 && fourExtended && fingersTogether && outward && belowFace
     && offset > faceWidth * aspect * .85;
   if (!pose) {
     if (now - addedSigns.heLastValid > 400) {
@@ -389,79 +391,104 @@ function detectFaceSigns(points, face, now) {
   return false;
 }
 
-const childMotion = { stage: '', anchor: null, since: 0, lastValid: 0, side: 0, latched: false };
+const fearMotion = { lastLowAt: null, holdSince: null, latched: false };
+const dislikeMotion = { start: null, openSince: null, latched: false };
 
-function resetChildMotion() {
-  Object.assign(childMotion, { stage: '', anchor: null, since: 0, lastValid: 0, side: 0, latched: false });
+function resetFearMotion() {
+  Object.assign(fearMotion, { lastLowAt: null, holdSince: null, latched: false });
 }
 
-function palmNormalY(points, aspect) {
-  const [wrist, index, pinky] = [points[0], points[5], points[17]];
-  const a = { x: (index.x - wrist.x) * aspect, y: index.y - wrist.y, z: (index.z - wrist.z) * aspect };
-  const b = { x: (pinky.x - wrist.x) * aspect, y: pinky.y - wrist.y, z: (pinky.z - wrist.z) * aspect };
-  const x = a.y * b.z - a.z * b.y;
-  const y = a.z * b.x - a.x * b.z;
-  const z = a.x * b.y - a.y * b.x;
-  return Math.abs(y) / Math.hypot(x, y, z);
+function resetDislikeMotion() {
+  Object.assign(dislikeMotion, { start: null, openSince: null, latched: false });
 }
 
-// A flat hand dips, rises and dips again below the face.
-function detectChild(points, face, now) {
-  if (now - childMotion.lastValid > 700 || (!childMotion.latched && now - childMotion.since > 1900)) resetChildMotion();
-  if (!points || !face) return false;
-
+// Both fists rise close to the chin, with the thumbs folded across the fingers.
+function detectFear(hands, face, now) {
+  if (!face) {
+    fearMotion.holdSince = null;
+    return false;
+  }
   const aspect = frameCanvas.width / frameCanvas.height;
-  const mouth = face[13], wrist = points[0], middle = points[12];
-  const faceWidth = Math.abs(face[234].x - face[454].x);
+  const chin = face[152], faceWidth = Math.abs(face[234].x - face[454].x);
   const scale = faceWidth * aspect;
-  const palm = handMetricDistance(wrist, points[9]);
-  if (faceWidth < .02 || palm < .015) return false;
-  const wristOffset = (wrist.x - mouth.x) / faceWidth;
-  const side = Math.sign(wristOffset);
-  const offset = (middle.y - mouth.y) / scale;
-  if (Math.abs(wristOffset) < .68 || Math.abs(wristOffset) > 2.65 || offset < 1.25 || offset > 3.55) {
-    resetChildMotion();
-    return false;
-  }
-  if (side !== childMotion.side) resetChildMotion();
-  // An individual frame can lose the finger shape during a quick dip.
-  if (!flatFingers(points, palm)) return false;
-  childMotion.lastValid = now;
-  childMotion.side = side;
-  if (childMotion.latched) {
-    if (offset >= 2.24) return true;
-    resetChildMotion();
-    return false;
-  }
+  if (faceWidth < .02) return false;
 
-  const sample = { offset, wristY: wrist.y };
-  const towardMiddle = side * (wrist.x - middle.x) * aspect;
-  const level = palmNormalY(points, aspect);
-  const raised = towardMiddle > palm * .85 && level > .44 && offset < 2.28;
-  const low = offset >= 2.24 && towardMiddle > palm * .85 && level > .4;
-  if (!childMotion.anchor) {
-    if (!raised && !low) return false;
-    childMotion.stage = raised ? 'first-press' : 'lift';
-    childMotion.anchor = sample;
-    childMotion.since = now;
+  if (!hands.length || hands.every(points => points[0].y - chin.y > scale * 1.3)) {
+    fearMotion.lastLowAt = now;
+  }
+  const nearChin = (points) => {
+    const wrist = points[0], palm = handMetricDistance(wrist, points[9]);
+    const x = Math.abs(wrist.x - chin.x) / faceWidth;
+    const y = (points[9].y - chin.y) / scale;
+    return palm > .015 && x > .19 && x < 1.35 && y > -.24 && y < .73
+      && wrist.y - points[9].y > palm * .48
+      && points[5].y - points[4].y < palm * .30
+      && handMetricDistance(points[4], points[5]) < palm * .94
+      && [8, 12, 16, 20].every(tip => fingerBendAngle(points, tip) < 108);
+  };
+  const raisedFists = hands.length === 2 && hands.every(nearChin)
+    && (hands[0][0].x - chin.x) * (hands[1][0].x - chin.x) < 0
+    && Math.abs(hands[0][9].y - hands[1][9].y) < scale * .54;
+  if (!raisedFists) {
+    fearMotion.latched = false;
+    fearMotion.holdSince = null;
     return false;
   }
+  if (fearMotion.latched) return true;
+  if (fearMotion.holdSince === null) {
+    if (fearMotion.lastLowAt === null || now - fearMotion.lastLowAt > 1400) return false;
+    fearMotion.holdSince = now;
+  }
+  if (now - fearMotion.holdSince < 250) return false;
+  fearMotion.latched = announce('กลัว', now);
+  return true;
+}
 
-  const anchor = childMotion.anchor;
-  if (childMotion.stage === 'lift') {
-    if (raised && anchor.offset - offset >= .32 && anchor.wristY - wrist.y >= scale * .15) {
-      childMotion.stage = 'second-press';
-      childMotion.anchor = sample;
-    } else if (offset > anchor.offset) childMotion.anchor = sample;
-  } else if (offset - anchor.offset >= .34 && wrist.y - anchor.wristY >= scale * .15) {
-    if (childMotion.stage === 'second-press') {
-      childMotion.latched = announce('เด็ก', now);
-      return true;
+// The index points across the chest before the fingers fan open on the wrist side.
+function detectDislike(points, face, now) {
+  if (!points || !face) { resetDislikeMotion(); return false; }
+  const aspect = frameCanvas.width / frameCanvas.height;
+  const chin = face[152], faceWidth = Math.abs(face[234].x - face[454].x);
+  const scale = faceWidth * aspect;
+  const wrist = points[0], palm = handMetricDistance(wrist, points[9]);
+  if (faceWidth < .02 || palm < .015) { resetDislikeMotion(); return false; }
+  const wristX = (wrist.x - chin.x) / faceWidth;
+  const wristY = (wrist.y - chin.y) / scale;
+  const indexX = (points[8].x - chin.x) / faceWidth;
+  const indexY = (points[8].y - chin.y) / scale;
+  const side = Math.sign(wrist.x - points[8].x);
+  const [index, middle, ring, pinky] = [8, 12, 16, 20].map(tip => fingerBendAngle(points, tip));
+  const pointingAcross = Math.abs(wristX) < .8 && wristY > .83 && wristY < 2.58
+    && indexY > .63 && indexY < 2.16 && side * indexX < -.22
+    && Math.abs(wrist.y - points[8].y) < palm * .86
+    && Math.abs(wrist.x - points[8].x) * aspect > palm * 1.05
+    && index > 150 && middle < 118 && ring < 115 && pinky < 115;
+  const palmY = (points[9].y - chin.y) / scale;
+  const openFan = wristY > .75 && wristY < 2.0 && palmY > .48 && palmY < 1.58
+    && wrist.y - points[12].y > palm * .64
+    && handMetricDistance(points[8], points[20]) > palm * 1.04
+    && [index, middle, ring, pinky].every(angle => angle > 145);
+  if (dislikeMotion.latched) {
+    if (openFan) return true;
+    resetDislikeMotion();
+  }
+  if (pointingAcross) {
+    const start = dislikeMotion.start;
+    if (!start || start.side !== side || now - start.at > 1200 || side * indexX < side * start.indexX) {
+      dislikeMotion.start = { side, indexX, wristX, at: now };
     }
-    childMotion.stage = 'lift';
-    childMotion.anchor = sample;
-  } else if (raised && offset < anchor.offset) childMotion.anchor = sample;
-  return false;
+  }
+  const start = dislikeMotion.start;
+  const wristMoved = start && start.side * (wristX - start.wristX) > .32;
+  const palmMoved = start && start.side * (points[9].x - chin.x) > faceWidth * .23;
+  if (!openFan || !start || now - start.at > 1450 || !wristMoved || !palmMoved) {
+    dislikeMotion.openSince = null;
+    return false;
+  }
+  dislikeMotion.openSince ??= now;
+  if (now - dislikeMotion.openSince < 120) return false;
+  dislikeMotion.latched = announce('ไม่ชอบ', now);
+  return true;
 }
 
 const smileMotion = { start: null, lastValid: 0, finishSince: 0, latched: false };
@@ -835,11 +862,14 @@ function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
   const wellActive = detectWell(helloActive ? [] : hands, face, now);
   const loveActive = !helloActive && !wellActive && detectLove(hands, handsResult, face, now, arms);
   const smileActive = detectSmile(helloActive || wellActive || loveActive ? [] : hands, face, now);
-  const bothHandsActive = helloActive || wellActive || loveActive || smileActive;
+  const previousPairActive = helloActive || wellActive || loveActive || smileActive;
+  const fearActive = !previousPairActive && detectFear(hands, face, now);
+  if (previousPairActive) { fearMotion.holdSince = null; fearMotion.latched = false; }
+  const bothHandsActive = previousPairActive || fearActive;
   const singleHand = !bothHandsActive && hands.length === 1 ? hands[0] : null;
   const faceSignActive = detectFaceSigns(singleHand, face, now);
-  const childActive = detectChild(faceSignActive ? null : singleHand, face, now);
-  const otherSignActive = bothHandsActive || faceSignActive || childActive;
+  const dislikeActive = detectDislike(faceSignActive ? null : singleHand, face, now);
+  const otherSignActive = bothHandsActive || faceSignActive || dislikeActive;
   if (helloActive || wellActive) { state.loveSince = 0; if (now - loveHold.lastValid > 600) loveHold.latched = false; }
   if (!otherSignActive && hands.length === 1 && face) {
     lastSingleAt = now;
