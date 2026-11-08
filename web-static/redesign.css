@@ -66,3 +66,42 @@ body{background:#f4f8fc;background-image:radial-gradient(ellipse at 85% 0%,#e2ef
 }
 
 .gesture-audio-help{margin:15px 0 0;color:#63788e;font-size:11px;line-height:1.8}
+
+.practice-step-guide {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #dbe6f4;
+  border-radius: 12px;
+  background: #f6f9fe;
+}
+.practice-step-guide h3 { margin: 0 0 10px; font-size: 14px; font-weight: 500; }
+.practice-step-guide ol { padding-left: 24px; margin: 0; }
+.practice-step-guide li { padding: 5px 4px; font-size: 12px; line-height: 1.8; color: #61748a; }
+.practice-step-guide li[data-state="current"] { color: #174b91; background: #dfecff; border-radius: 6px; font-weight: 500; }
+.practice-step-guide li[data-state="done"] { color: #27715e; }
+.practice-step-guide p { margin: 8px 0 0; color: #61748a; font-size: 11px; line-height: 1.7; }
+.practice-card .practice-test-toggle { display: flex; align-items: center; gap: 9px; margin: 18px 0 10px; font-size: 14px; color: #174b91; cursor: pointer; }
+.practice-test-toggle input { flex: none; width: 20px; height: 20px; accent-color: #2868c7; }
+.practice-test-live {
+  margin: 0 0 14px;
+  padding: 15px;
+  border: 1px solid #a6c6ed;
+  border-radius: 12px;
+  background: #eaf3ff;
+  color: #173f70;
+}
+.practicing .practice-test-live { order: -1; }
+.practice-test-live[hidden], .practice-test-results[hidden] { display: none; }
+.practice-test-live strong { display: block; font-size: clamp(16px, 1.9vw, 20px); line-height: 1.7; font-weight: 500; }
+.practice-test-live > span { display: block; margin: 7px 0; font-size: 15px; font-variant-numeric: tabular-nums; }
+.practice-test-live progress { width: 100%; height: 10px; accent-color: #2868c7; }
+.practice-test-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.practice-test-results { padding: 14px; border: 1px solid #dbe6f4; border-radius: 12px; background: #f6f9fe; }
+.practice-test-results p, .practice-test-results summary, .practice-test-results li { font-size: 12px; line-height: 1.8; }
+.practice-test-results > p { margin: 0 0 10px; color: #536c86; }
+.practice-test-results .practice-test-summary { font-size: 14px; color: #174b91; font-weight: 500; }
+.practice-test-results ol { padding-left: 22px; }
+.practice-test-results li[data-outcome="correct"] { color: #27715e; }
+.practice-test-results li[data-outcome="wrong"] { color: #925916; }
+.practice-test-results button { margin: 10px 0; }
+.practice-test-results .practice-note { font-size: 10px; }

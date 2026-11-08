@@ -105,6 +105,12 @@
           <article class="card camera-card">
             <div class="card-heading"><div><span class="eyebrow">CAMERA</span><h2>ตรวจจับท่าทาง</h2></div></div>
             <div id="camera-status" class="camera-readable-status" aria-label="สถานะการตรวจจับ">ปิดกล้อง</div>
+            <section id="practice-test-live" class="practice-test-live" hidden aria-label="รอบทดสอบความแม่นยำ">
+              <strong id="practice-test-status" role="status">เตรียมทดสอบคำที่เลือก 10 ครั้ง</strong>
+              <span id="practice-test-time"></span>
+              <progress id="practice-test-clock" max="8" value="8" aria-label="เวลาที่เหลือในครั้งนี้" hidden></progress>
+              <div class="practice-test-actions"><button id="practice-test-start" type="button" class="primary">เริ่มครั้งที่ 1</button><button id="practice-test-cancel" type="button" class="secondary" hidden>ยกเลิกครั้งนี้</button></div>
+            </section>
             <div class="camera-wrap"><div class="camera-live-label" aria-hidden="true"><i></i> CAMERA</div><video id="camera-video" autoplay muted playsinline></video><div id="camera-placeholder" class="camera-placeholder">แตะ “เปิดกล้อง” เพื่อเริ่มแปล</div><div id="gesture-live-caption" class="gesture-live-caption" hidden></div></div>
             <div class="camera-controls"><button id="camera-start" class="primary" type="button">เปิดกล้อง</button><button id="camera-stop" class="secondary" type="button" hidden>ปิดกล้อง</button></div>
             <div id="camera-framing" class="camera-framing" hidden data-level="info">
@@ -124,10 +130,19 @@
             <span class="eyebrow">PRACTICE ONE SIGN</span><h2>ดูตัวอย่าง แล้วลองทำตาม</h2>
             <label for="practice-word">เลือกคำที่ต้องการฝึก</label><select id="practice-word"></select>
             <div class="practice-example"><video id="practice-video" muted playsinline loop preload="metadata" aria-label="คลิปตัวอย่างคำที่กำลังฝึก"></video><button id="practice-play" type="button" class="secondary">▶ ดูคลิปตัวอย่าง</button></div>
+            <section class="practice-step-guide" aria-label="ขั้นตอนของท่าที่เลือก"><h3>ทำตามทีละจังหวะ</h3><ol id="practice-steps"></ol><p id="practice-step-note">ขั้นตอนจะเปลี่ยนตามจังหวะที่กล้องตรวจพบ</p></section>
+            <label class="practice-test-toggle"><input id="practice-test-mode" type="checkbox"> ทดสอบคำนี้ 10 ครั้ง</label>
+            <section id="practice-test-results" class="practice-test-results" hidden>
+              <p>แต่ละครั้งให้ลดมือพ้นภาพก่อนเริ่ม แล้วทำท่าภายใน 8 วินาที ระบบบันทึกคำแรกที่อ่านได้ หรือบันทึกว่าจับไม่ได้เมื่อหมดเวลา</p>
+              <p id="practice-test-summary" class="practice-test-summary" role="status"></p>
+              <details id="practice-test-details"><summary>ดูผลแต่ละครั้ง</summary><ol id="practice-test-attempts"></ol></details>
+              <button id="practice-test-reset" type="button" class="secondary">เริ่มชุดใหม่</button>
+              <p id="practice-test-storage" class="practice-note">เก็บผลชุดล่าสุดของแต่ละคำในเบราว์เซอร์นี้</p>
+            </section>
             <div id="practice-result" class="practice-result" data-state="waiting"><strong id="practice-result-title">เปิดกล้องเพื่อเริ่มฝึก</strong><p id="practice-result-message">ดูคลิปตัวอย่างก่อน จากนั้นกด “เปิดกล้อง”</p></div>
             <div class="practice-actions"><button id="practice-retry" type="button" class="secondary" hidden>ฝึกคำนี้อีกครั้ง</button><button id="practice-next" type="button" class="primary">คำถัดไป →</button></div>
             <p id="practice-progress" class="practice-progress" aria-live="polite">ฝึกสำเร็จในรอบนี้ 0 คำ</p>
-            <p class="practice-note">โหมดนี้ตรวจเฉพาะคำที่เลือกและไม่ต่อคำเป็นประโยค ผลสำเร็จหมายถึงระบบตรวจพบท่าที่เลือกจากกล้อง</p>
+            <p id="practice-note" class="practice-note">โหมดฝึกตรวจเฉพาะคำที่เลือก ผลสำเร็จหมายถึงระบบตรวจพบท่าจากกล้อง ส่วนรอบทดสอบจะบันทึกคำแรกที่อ่านได้เพื่อดูการอ่านสับกัน</p>
           </article>
           <article class="card gesture-output-card">
             <span class="eyebrow">DETECTED SIGNS</span><h2>ท่าที่ตรวจพบแล้ว</h2>

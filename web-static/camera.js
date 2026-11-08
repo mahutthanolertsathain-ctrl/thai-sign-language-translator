@@ -43,15 +43,19 @@ const SICK_FOREHEAD_DISTANCE = 0.12;
 
 function distance(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function up(points, tip, pip) { return points[tip].y < points[pip].y; }
-const practice = { active: document.getElementById('gesture-system').classList.contains('practicing'), word: document.getElementById('practice-word').value, matched: false, awaitNeutral: document.getElementById('gesture-system').classList.contains('practicing'), neutralSince: null };
+const practice = { active: document.getElementById('gesture-system').classList.contains('practicing'), word: document.getElementById('practice-word').value, matched: false, awaitNeutral: document.getElementById('gesture-system').classList.contains('practicing'), neutralSince: null, testing: false, accepting: true };
 window.addEventListener('practice-settings-changed', (event) => {
   practice.active = Boolean(event.detail.active); practice.word = event.detail.word || '';
+  practice.testing = Boolean(event.detail.testing);
+  practice.accepting = event.detail.accepting !== false;
   practice.matched = false; practice.awaitNeutral = practice.active; practice.neutralSince = null;
   resetRecognitionState();
+  publishPracticeInstruction();
   if (!framingPanel.hidden) renderCameraGuidance();
 });
 function announce(word, now, minimumInterval = 2200) {
-  if (practice.active && (practice.matched || practice.awaitNeutral || word !== practice.word)) return false;
+  if (practice.active && (practice.matched || practice.awaitNeutral || !practice.accepting
+      || !practice.testing && word !== practice.word)) return false;
   const last = state.cooldown.get(word);
   if (last !== undefined && now - last < minimumInterval) return false;
   state.cooldown.set(word, now);
@@ -845,8 +849,9 @@ function detectHelpSOS(hands, now) {
 function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
   const hands = handsResult.landmarks || [];
   const face = (faceResult.faceLandmarks || [])[0];
+  if (practice.active && practice.testing && !practice.accepting) return 'รอบทดสอบ · กดเริ่มเมื่อพร้อมทำท่า';
   if (practice.active && practice.awaitNeutral) {
-    if (!hands.length) {
+    if (!hands.length && (!practice.testing || face)) {
       practice.neutralSince ??= now;
       if (now - practice.neutralSince >= 450) {
         practice.awaitNeutral = false; resetRecognitionState();
@@ -939,21 +944,85 @@ function framingFeedback(handsResult, faceResult, poseResult, now = 0) {
   if (!chestVisible(poseResult?.landmarks?.[0])) return { key: 'body', level: 'info', message: 'ยังไม่เห็นช่วงอกชัดเจน · ถอยออกหรือปรับกล้องให้เห็นไหล่ทั้งสองข้างและลำตัวช่วงอก' };
   return { key: 'ready', level: 'ready', message: 'เห็นใบหน้า มือ และช่วงอกแล้ว · ทำท่าตามคลิปตัวอย่างได้เลย' };
 }
-function practiceGuidance(feedback, holdingMe) {
+const practiceStepGuides = {
+  'ฉัน': ['วางมือขวาที่อก เหยียดนิ้วให้ชิดกันตามคลิป', 'พบมือที่อกแล้ว · ค้างมือให้นิ่ง 1.5 วินาที'],
+  'เขา': ['แบมือให้นิ้วชิดกัน แล้วหันปลายนิ้วออกด้านข้างตามคลิป', 'พบรูปมือแล้ว · ยื่นมือออกด้านข้างเล็กน้อย'],
+  'หิว': ['เหยียดนิ้วชี้ใกล้ลำคอ เก็บนิ้วที่เหลือตามคลิป', 'พบจังหวะเริ่มแล้ว · งอนิ้วชี้เข้าหาลำคอ'],
+  'อิ่ม': ['เหยียดนิ้วให้ชิดกัน วางมือแนวนอนที่ช่วงอก', 'พบมือแบนแล้ว · ยกขึ้นมาใต้คางแล้วค้างสักครู่'],
+  'สวัสดี': ['พนมมือเข้าหากันตรงกลางตามคลิป', 'พบมือพนมแล้ว · ก้มศีรษะไหว้'],
+  'สบายดี': ['วางมือแบทั้งสองข้างหน้าอก ปลายนิ้วเข้าหากัน', 'พบจังหวะเริ่มแล้ว · ยกสองมือแล้วชูนิ้วโป้งทั้งสองข้าง', 'พบจังหวะชูนิ้วโป้งแล้ว · ค้างสักครู่'],
+  'พ่อ': ['กางนิ้วตามคลิป วางนิ้วโป้งใกล้แก้ม', 'พบจังหวะเริ่มแล้ว · พับนิ้วเข้าหากันให้เป็นกำมือ', 'พบกำมือแล้ว · ค้างให้นิ่งสักครู่'],
+  'แม่': ['ชูนิ้วชี้กับนิ้วโป้งตามคลิป วางนิ้วโป้งใกล้แก้ม', 'พบจังหวะเริ่มแล้ว · พับนิ้วชี้ลง', 'พบจังหวะพับนิ้วแล้ว · ค้างสักครู่'],
+  'ลุง': ['ชูนิ้วชี้กับนิ้วโป้งเป็นรูป L ข้างขมับ', 'พบรูปมือแล้ว · ขยับมือไปกลับตามคลิปโดยคงรูป L'],
+  'โกรธ': ['รวมปลายนิ้วแตะบริเวณหน้าผากตามคลิป', 'พบจังหวะแตะแล้ว · ดึงมือออกจากหน้าผาก'],
+  'ร้องไห้': ['ชูนิ้วชี้กับนิ้วกลางเป็นรูป V ใกล้ตาตามคลิป', 'พบจังหวะเริ่มแล้ว · เลื่อนสองนิ้วลงตามแนวใบหน้า'],
+  'ยิ้ม': ['วางปลายนิ้วทั้งสองมือใกล้กลางปากตามคลิป', 'พบจังหวะเริ่มแล้ว · แยกสองมือออกไปทางแก้ม', 'พบจังหวะแยกมือแล้ว · ค้างสักครู่'],
+  'กลัว': ['ยกกำปั้นทั้งสองจากช่วงอกขึ้นมาใกล้ใต้คางตามคลิป', 'พบกำปั้นใกล้คางแล้ว · เก็บนิ้วโป้งแล้วค้างสักครู่'],
+  'ไม่ชอบ': ['ชี้นิ้วข้ามหน้าอกไปด้านข้างตามคลิป', 'พบจังหวะชี้แล้ว · เคลื่อนมือกลับแล้วกางนิ้วออก', 'พบจังหวะกางนิ้วแล้ว · ค้างสักครู่'],
+  'รัก': ['วางมือแบทั้งสองไขว้กันที่อกตามคลิป', 'พบมือไขว้ที่อกแล้ว · ค้างสักครู่'],
+  'ไม่สบาย': ['วางหลังมือใกล้หน้าผากตามคลิป', 'พบจังหวะเริ่มแล้ว · ขยับหลังมือให้ชิดหน้าผาก', 'พบมือใกล้หน้าผากแล้ว · ค้างสักครู่'],
+  'ช่วยฉันด้วย': ['กางมือให้นิ้วชิดกัน หันฝ่ามือเข้ากล้องตามคลิป', 'พบมือกางแล้ว · ค้างสักครู่', 'พบจังหวะเริ่มแล้ว · พับนิ้วโป้งเข้าฝ่ามือ', 'พบจังหวะพับนิ้วโป้งแล้ว · กำมือทับนิ้วโป้ง']
+};
+
+function currentPracticeStep(now) {
+  switch (practice.word) {
+    case 'ฉัน': return state.meSince > 0 ? 1 : 0;
+    case 'เขา': return addedSigns.heSince && now - addedSigns.heLastValid <= 400 ? 1 : 0;
+    case 'หิว': return addedSigns.hungryStage > 0 ? 1 : 0;
+    case 'อิ่ม': return fullState.start && now - fullState.start.at <= 1500 ? 1 : 0;
+    case 'สวัสดี': return helloState.since > 0 ? 1 : 0;
+    case 'สบายดี': return wellState.thumbsSince ? 2 : wellState.chestAt ? 1 : 0;
+    case 'พ่อ': return state.fatherFistSince ? 2 : state.fatherStage ? 1 : 0;
+    case 'แม่': return state.motherFistSince ? 2 : state.motherStage ? 1 : 0;
+    case 'ลุง': return uncleMotion.samples.length ? 1 : 0;
+    case 'โกรธ': return state.angryStage ? 1 : 0;
+    case 'ร้องไห้': return cryMotion.start ? 1 : 0;
+    case 'ยิ้ม': return smileMotion.finishSince ? 2 : smileMotion.start ? 1 : 0;
+    case 'กลัว': return fearMotion.holdSince !== null ? 1 : 0;
+    case 'ไม่ชอบ': return dislikeMotion.openSince !== null ? 2 : dislikeMotion.start ? 1 : 0;
+    case 'รัก': return state.loveSince ? 1 : 0;
+    case 'ไม่สบาย': return state.sickHoldSince ? 2 : state.sickStage ? 1 : 0;
+    case 'ช่วยฉันด้วย': return state.sosStage ? state.sosStage + 1 : state.sosHoldSince ? 1 : 0;
+    default: return 0;
+  }
+}
+
+let lastPracticeInstruction = '';
+function publishPracticeInstruction(now = 0) {
+  const steps = practiceStepGuides[practice.word];
+  if (!steps) return;
+  const paused = practice.testing && !practice.accepting || practice.awaitNeutral;
+  const index = paused ? -1 : currentPracticeStep(now);
+  const complete = practice.matched && state.lastWord === practice.word;
+  const key = `${practice.word}|${index}|${complete}`;
+  if (key === lastPracticeInstruction) return;
+  lastPracticeInstruction = key;
+  window.dispatchEvent(new CustomEvent('practice-instruction', {
+    detail: { word: practice.word, steps, index, complete }
+  }));
+}
+
+function practiceGuidance(feedback, holdingMe, now) {
+  if (practice.testing && !practice.accepting) return { level: 'info', message: 'ดูผลครั้งที่ผ่านมา แล้วกดเริ่มเมื่อพร้อมทำท่าครั้งถัดไป' };
   if (practice.matched) return { level: 'ready', message: 'ทำท่าสำเร็จแล้ว · เลือกฝึกอีกครั้งหรือไปคำถัดไปได้เลย' };
-  if (practice.awaitNeutral) return { level: 'info', message: 'ลดมือให้พ้นภาพสักครู่ แล้วค่อยเริ่มทำท่า' };
+  if (practice.awaitNeutral) {
+    if (practice.testing && feedback.key === 'face') return feedback;
+    return { level: 'info', message: 'ลดมือให้พ้นภาพสักครู่ แล้วค่อยเริ่มทำท่า' };
+  }
   if (holdingMe) return { level: 'ready', message: 'เริ่มนับแล้ว · ค้างมือที่อกให้นิ่งจนแถบเต็ม' };
-  if (practice.word === 'ฉัน' && (feedback.key === 'ready' || feedback.key === 'body' && !poseTask)) {
-    return { level: 'info', message: `วางมือขวาที่อก เหยียดนิ้วให้ชิดกัน แล้วค้างไว้ ${ME_HOLD_SECONDS} วินาที` };
+  const step = currentPracticeStep(now);
+  if (feedback.level !== 'warning' && (step > 0 || feedback.key === 'ready' || feedback.key === 'body' && !poseTask)) {
+    const message = practiceStepGuides[practice.word]?.[step];
+    if (message) return { level: step > 0 ? 'ready' : 'info', message };
   }
   return feedback;
 }
 
 function renderCameraGuidance(now) {
-  const showHold = practice.active && practice.word === 'ฉัน' && !practice.awaitNeutral;
+  const showHold = practice.active && practice.word === 'ฉัน' && !practice.awaitNeutral && practice.accepting;
   const holdMs = practice.matched ? ME_HOLD_MS : state.meSince ? state.meLastValid - state.meSince : 0;
   const holdingMe = showHold && state.meSince > 0 && state.meLastValid === now;
-  const feedback = practice.active ? practiceGuidance(framingState.shown, holdingMe) : framingState.shown;
+  const feedback = practice.active ? practiceGuidance(framingState.shown, holdingMe, now) : framingState.shown;
   framingPanel.dataset.level = feedback.level;
   if (guidance.textContent !== feedback.message) guidance.textContent = feedback.message;
 
@@ -964,6 +1033,7 @@ function renderCameraGuidance(now) {
     const time = `${seconds} / ${ME_HOLD_SECONDS} วินาที`;
     if (holdTime.textContent !== time) holdTime.textContent = time;
   }
+  if (practice.active) publishPracticeInstruction(now);
 }
 
 function updateFramingGuidance(handsResult, faceResult, poseResult, now) {
@@ -1086,3 +1156,4 @@ window.addEventListener('system-view-changed', (event) => {
   if (event.detail?.systemId !== 'gesture-system' && stream) stopCamera();
 });
 window.addEventListener('pagehide', stopCamera);
+publishPracticeInstruction();

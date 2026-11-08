@@ -23,6 +23,16 @@ let pendingPractice = false;
 let practiceComplete = false;
 let practiceCameraReady = false;
 const practicedWords = new Set();
+const PRACTICE_TEST_LIMIT = 10;
+const PRACTICE_TEST_DURATION_MS = 8000;
+const PRACTICE_TEST_STORAGE = 'muepood-practice-tests-v1';
+let practiceTestMode = false;
+let practiceTestPhase = 'idle';
+let practiceTestTimer = null;
+let practiceTestStartedAt = 0;
+let practiceTestDeadline = 0;
+let practiceTestRuns = {};
+let practiceTestStorageAvailable = true;
 
 const el = (id) => document.getElementById(id);
 const normalize = (value) => (value || '').toLocaleLowerCase('th').replace(/[\sๆฯ,.!?…]/g, '');
@@ -273,6 +283,12 @@ function submitText(text = el('text-input').value, { keepInput = false } = {}) {
 
 function handleSignDetected(word) {
   if (practiceMode) {
+    if (practiceTestMode) {
+      if (practiceTestPhase === 'running') {
+        finishPracticeTest(performance.now() >= practiceTestDeadline ? null : word);
+      }
+      return;
+    }
     if (!practiceComplete && word === el('practice-word').value) completePractice();
     return;
   }
@@ -797,11 +813,15 @@ function practiceResult(title, message, state = 'waiting') {
 function resetPracticeAttempt() {
   practiceComplete = false;
   el('practice-retry').hidden = true;
-  window.dispatchEvent(new CustomEvent('practice-settings-changed', { detail: { active: practiceMode, word: el('practice-word').value } }));
+  window.dispatchEvent(new CustomEvent('practice-settings-changed', { detail: {
+    active: practiceMode, word: el('practice-word').value,
+    testing: practiceTestMode, accepting: !practiceTestMode || practiceTestPhase === 'neutral' || practiceTestPhase === 'running'
+  } }));
   practiceResult(practiceCameraReady ? 'เตรียมเริ่มท่าใหม่' : 'เปิดกล้องเพื่อเริ่มฝึก', practiceCameraReady
     ? 'ลดมือให้พ้นภาพสักครู่ แล้วทำท่าตามคลิปตัวอย่าง' : 'ดูคลิปตัวอย่างก่อน จากนั้นกด “เปิดกล้อง”');
 }
 function updatePracticeLesson() {
+  cancelPracticeTest();
   const lesson = practiceLessons.find((item) => item.word === el('practice-word').value);
   if (!lesson) return;
   const video = el('practice-video'); video.pause(); video.src = lesson.src; video.load();
@@ -809,8 +829,10 @@ function updatePracticeLesson() {
   video.setAttribute('aria-label', `คลิปตัวอย่างท่า${lesson.label}`);
   document.querySelector('.camera-card h2').textContent = practiceMode ? `ฝึกท่า “${lesson.label}”` : 'ตรวจจับท่าทาง';
   resetPracticeAttempt();
+  renderPracticeTest();
 }
 function setPracticeMode(active) {
+  cancelPracticeTest();
   practiceMode = active;
   document.getElementById('gesture-system').classList.toggle('practicing', active);
   el('practice-card').hidden = !active;
@@ -834,7 +856,179 @@ function setPracticeMode(active) {
     document.querySelector('.gesture-mode-switch').scrollIntoView({ block: 'start', behavior: 'auto' });
   }
   else { el('practice-video').pause(); document.querySelector('.camera-card h2').textContent = 'ตรวจจับท่าทาง'; resetPracticeAttempt(); }
+  renderPracticeTest();
 }
+function loadPracticeTests() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PRACTICE_TEST_STORAGE) || '{}');
+    for (const { word } of practiceLessons) {
+      const attempts = saved?.[word]?.attempts;
+      if (!Array.isArray(attempts) || attempts.length > PRACTICE_TEST_LIMIT) continue;
+      const valid = attempts.every(attempt => {
+        if (!attempt || typeof attempt !== 'object') return false;
+        const knownPrediction = practiceLessons.some(lesson => lesson.word === attempt.prediction);
+        const outcome = attempt.prediction === null ? 'missed' : attempt.prediction === word ? 'correct' : 'wrong';
+        return (attempt.prediction === null || knownPrediction) && attempt.outcome === outcome
+          && Number.isFinite(attempt.at) && Number.isFinite(attempt.durationMs) && attempt.durationMs >= 0;
+      });
+      if (valid) practiceTestRuns[word] = { attempts: attempts.map(attempt => ({
+        prediction: attempt.prediction, outcome: attempt.outcome, at: attempt.at, durationMs: attempt.durationMs
+      })) };
+    }
+  } catch (_) {
+    practiceTestRuns = {};
+  }
+}
+
+function savePracticeTests() {
+  try {
+    localStorage.setItem(PRACTICE_TEST_STORAGE, JSON.stringify(practiceTestRuns));
+    practiceTestStorageAvailable = true;
+  } catch (_) {
+    practiceTestStorageAvailable = false;
+  }
+}
+
+function currentPracticeTest() {
+  const word = el('practice-word').value;
+  practiceTestRuns[word] ??= { attempts: [] };
+  return practiceTestRuns[word];
+}
+
+function practiceTestBusy() {
+  return practiceTestPhase === 'neutral' || practiceTestPhase === 'running';
+}
+
+function renderPracticeTest() {
+  const testing = practiceMode && practiceTestMode;
+  const busy = practiceTestBusy();
+  const { attempts } = currentPracticeTest();
+  const complete = attempts.length === PRACTICE_TEST_LIMIT;
+  el('practice-test-live').hidden = !testing;
+  el('practice-test-results').hidden = !testing;
+  el('practice-word').disabled = busy;
+  el('practice-next').disabled = busy;
+  el('practice-play').disabled = busy;
+  el('practice-test-reset').disabled = busy;
+  el('practice-test-start').disabled = !practiceCameraReady || busy || complete;
+  el('practice-test-start').hidden = busy;
+  el('practice-test-cancel').hidden = !busy;
+  el('practice-test-clock').hidden = practiceTestPhase !== 'running';
+  el('practice-test-start').textContent = `เริ่มครั้งที่ ${Math.min(attempts.length + 1, PRACTICE_TEST_LIMIT)}`;
+  if (practiceTestMode) el('practice-retry').hidden = true;
+
+  const label = el('practice-word').selectedOptions[0]?.textContent || '';
+  let status = `ทดสอบ “${label}” · บันทึกแล้ว ${attempts.length} / ${PRACTICE_TEST_LIMIT} ครั้ง`;
+  if (practiceTestPhase === 'neutral') status = `ครั้งที่ ${attempts.length + 1} · ลดมือให้พ้นภาพสักครู่เพื่อเริ่มนับเวลา`;
+  if (practiceTestPhase === 'running') status = `ครั้งที่ ${attempts.length + 1} · ทำท่า “${label}” ได้เลย`;
+  if (complete) status = `ทดสอบ “${label}” ครบ ${PRACTICE_TEST_LIMIT} ครั้งแล้ว`;
+  el('practice-test-status').textContent = status;
+  if (practiceTestPhase !== 'running') {
+    el('practice-test-time').textContent = busy ? 'เตรียมพร้อม · เวลายังไม่เริ่มนับ' : practiceCameraReady ? 'กดเริ่มเมื่อพร้อมทำท่า' : 'เปิดกล้องก่อนเริ่มทดสอบ';
+  }
+
+  const correct = attempts.filter(attempt => attempt.outcome === 'correct').length;
+  const wrong = attempts.filter(attempt => attempt.outcome === 'wrong').length;
+  const missed = attempts.length - correct - wrong;
+  el('practice-test-summary').textContent = attempts.length
+    ? `ผลชุดนี้ · จับตรงคำ ${correct} / ${attempts.length} ครั้ง (${Math.round(correct / attempts.length * 100)}%) · อ่านเป็นคำอื่น ${wrong} ครั้ง · จับไม่ได้ ${missed} ครั้ง`
+    : 'ยังไม่มีผลทดสอบของคำนี้';
+  el('practice-test-attempts').replaceChildren(...attempts.map((attempt, index) => {
+    const item = document.createElement('li');
+    item.dataset.outcome = attempt.outcome;
+    const result = attempt.outcome === 'correct' ? 'จับตรงคำ'
+      : attempt.outcome === 'wrong' ? `อ่านเป็น “${attempt.prediction}”` : 'จับไม่ได้ภายใน 8 วินาที';
+    item.textContent = `ครั้งที่ ${index + 1} · ${result}`;
+    return item;
+  }));
+  el('practice-test-storage').textContent = practiceTestStorageAvailable
+    ? 'เก็บผลชุดล่าสุดของแต่ละคำในเบราว์เซอร์นี้ ผลทดสอบขึ้นอยู่กับผู้ทำท่า แสง และมุมกล้องในชุดนี้'
+    : 'เบราว์เซอร์บันทึกผลถาวรไม่ได้ ผลชุดนี้จะแสดงจนกว่าจะปิดหรือรีเฟรชหน้า';
+}
+
+function cancelPracticeTest(message = '') {
+  const interrupted = practiceTestBusy();
+  clearInterval(practiceTestTimer);
+  practiceTestTimer = null;
+  practiceTestPhase = 'idle';
+  if (interrupted) {
+    resetPracticeAttempt();
+    if (message) practiceResult('ยกเลิกครั้งนี้แล้ว', message);
+  }
+}
+
+function startPracticeTest() {
+  if (!practiceMode || !practiceTestMode || !practiceCameraReady || practiceTestBusy()
+      || currentPracticeTest().attempts.length >= PRACTICE_TEST_LIMIT) return;
+  el('practice-video').pause();
+  practiceTestPhase = 'neutral';
+  resetPracticeAttempt();
+  practiceResult('เตรียมทดสอบครั้งใหม่', 'ลดมือให้พ้นภาพสักครู่ แล้วทำท่าเมื่อระบบเริ่มนับเวลา');
+  renderPracticeTest();
+}
+
+function runPracticeTest() {
+  if (practiceTestPhase !== 'neutral' || !practiceCameraReady) return;
+  practiceTestPhase = 'running';
+  practiceTestStartedAt = performance.now();
+  practiceTestDeadline = practiceTestStartedAt + PRACTICE_TEST_DURATION_MS;
+  practiceResult('เริ่มทำท่าได้เลย', 'ระบบจะบันทึกคำแรกที่อ่านได้ในครั้งนี้');
+  renderPracticeTest();
+  const update = () => {
+    const remaining = Math.max(0, practiceTestDeadline - performance.now());
+    el('practice-test-clock').value = remaining / 1000;
+    el('practice-test-time').textContent = `เหลือ ${Math.ceil(remaining / 1000)} วินาที`;
+    if (!remaining) finishPracticeTest(null);
+  };
+  practiceTestTimer = setInterval(update, 100);
+  update();
+}
+
+function finishPracticeTest(prediction) {
+  if (practiceTestPhase !== 'running') return;
+  clearInterval(practiceTestTimer);
+  practiceTestTimer = null;
+  const word = el('practice-word').value;
+  const outcome = prediction === null ? 'missed' : prediction === word ? 'correct' : 'wrong';
+  currentPracticeTest().attempts.push({
+    prediction, outcome, at: Date.now(), durationMs: Math.min(PRACTICE_TEST_DURATION_MS, performance.now() - practiceTestStartedAt)
+  });
+  practiceTestPhase = 'result';
+  savePracticeTests();
+  resetPracticeAttempt();
+  const message = outcome === 'correct' ? `ระบบอ่านเป็น “${prediction}” ตรงกับคำที่เลือก`
+    : outcome === 'wrong' ? `เลือก “${word}” แต่ระบบอ่านเป็น “${prediction}”` : 'หมดเวลา 8 วินาทีโดยระบบยังอ่านท่าไม่ได้';
+  practiceResult(outcome === 'correct' ? 'จับตรงคำแล้ว' : 'บันทึกผลครั้งนี้แล้ว', message, outcome === 'correct' ? 'success' : 'waiting');
+  renderPracticeTest();
+}
+
+el('practice-test-mode').addEventListener('change', () => {
+  cancelPracticeTest();
+  practiceTestMode = el('practice-test-mode').checked;
+  resetPracticeAttempt();
+  renderPracticeTest();
+  if (practiceTestMode) el('practice-test-live').scrollIntoView({ block: 'start', behavior: 'auto' });
+});
+el('practice-test-start').addEventListener('click', startPracticeTest);
+el('practice-test-cancel').addEventListener('click', () => {
+  cancelPracticeTest('ครั้งที่ยกเลิกจะไม่นับรวมในผลทดสอบ');
+  renderPracticeTest();
+});
+el('practice-test-reset').addEventListener('click', () => {
+  if (practiceTestBusy()) return;
+  practiceTestRuns[el('practice-word').value] = { attempts: [] };
+  savePracticeTests();
+  resetPracticeAttempt();
+  renderPracticeTest();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && practiceTestBusy()) {
+    cancelPracticeTest('กลับมาหน้านี้แล้วกดเริ่มครั้งเดิมได้อีกครั้ง');
+    renderPracticeTest();
+  }
+});
+window.addEventListener('pagehide', () => cancelPracticeTest());
+
 function completePractice() {
   practiceComplete = true;
   const word = el('practice-word').value;
@@ -869,11 +1063,32 @@ el('practice-video').addEventListener('play', () => { el('practice-play').textCo
 el('practice-video').addEventListener('pause', () => { el('practice-play').textContent = '▶ ดูคลิปตัวอย่าง'; });
 el('practice-video').addEventListener('error', () => { if (practiceMode) practiceResult('โหลดคลิปไม่ได้', 'ตรวจการเชื่อมต่อแล้วลองเลือกคำอีกครั้ง'); });
 window.addEventListener('practice-ready', () => {
+  if (practiceMode && practiceTestMode) {
+    if (practiceTestPhase === 'neutral') runPracticeTest();
+    return;
+  }
   if (practiceMode && !practiceComplete) practiceResult(`กำลังรอท่า “${el('practice-word').selectedOptions[0].textContent}”`, 'ทำท่าตามคลิป โดยให้กล้องเห็นใบหน้าและมือชัดเจน');
 });
 window.addEventListener('camera-state-changed', (event) => {
   practiceCameraReady = event.detail.state === 'ready';
+  if (!practiceCameraReady) cancelPracticeTest('กล้องหยุดแล้ว · ครั้งที่ยังทำค้างอยู่จะเริ่มใหม่ได้');
+  renderPracticeTest();
   if (practiceMode && !practiceComplete && !practiceCameraReady) practiceResult('ยังไม่ได้เปิดกล้อง', 'กด “เปิดกล้อง” เพื่อเริ่มฝึกคำที่เลือก');
 });
+window.addEventListener('practice-instruction', (event) => {
+  const { word, steps, index, complete } = event.detail;
+  if (word !== el('practice-word').value) return;
+  el('practice-steps').replaceChildren(...steps.map((text, stepIndex) => {
+    const item = document.createElement('li');
+    item.textContent = text;
+    item.dataset.state = complete || stepIndex < index ? 'done' : stepIndex === index ? 'current' : 'pending';
+    if (!complete && stepIndex === index) item.setAttribute('aria-current', 'step');
+    return item;
+  }));
+  el('practice-step-note').textContent = complete ? 'ระบบตรวจพบท่าที่เลือกครบแล้ว'
+    : !practiceCameraReady ? 'เปิดกล้องเพื่อให้ขั้นตอนเปลี่ยนตามจังหวะที่ตรวจพบ'
+    : index < 0 ? 'เตรียมพร้อมก่อนเริ่มทำท่า' : `กำลังรอจังหวะที่ ${index + 1} / ${steps.length}`;
+});
+loadPracticeTests();
 updatePracticeLesson();
 el('practice-progress').textContent = `ฝึกสำเร็จในรอบนี้ 0 / ${practiceLessons.length} คำ`;
