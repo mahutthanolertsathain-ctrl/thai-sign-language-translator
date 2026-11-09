@@ -396,14 +396,14 @@ function detectFaceSigns(points, face, now) {
 }
 
 const fearMotion = { lastLowAt: null, holdSince: null, latched: false };
-const dislikeMotion = { start: null, openSince: null, latched: false };
+const dislikeMotion = { start: null, lastTrackedAt: null, latched: false };
 
 function resetFearMotion() {
   Object.assign(fearMotion, { lastLowAt: null, holdSince: null, latched: false });
 }
 
 function resetDislikeMotion() {
-  Object.assign(dislikeMotion, { start: null, openSince: null, latched: false });
+  Object.assign(dislikeMotion, { start: null, lastTrackedAt: null, latched: false });
 }
 
 // Both fists rise close to the chin, with the thumbs folded across the fingers.
@@ -450,47 +450,51 @@ function detectFear(hands, face, now) {
 
 // The index points across the chest before the fingers fan open on the wrist side.
 function detectDislike(points, face, now) {
-  if (!points || !face) { resetDislikeMotion(); return false; }
+  if (dislikeMotion.lastTrackedAt !== null && now - dislikeMotion.lastTrackedAt > 650) resetDislikeMotion();
+  if (!points || !face) return false;
   const aspect = frameCanvas.width / frameCanvas.height;
   const chin = face[152], faceWidth = Math.abs(face[234].x - face[454].x);
   const scale = faceWidth * aspect;
   const wrist = points[0], palm = handMetricDistance(wrist, points[9]);
   if (faceWidth < .02 || palm < .015) { resetDislikeMotion(); return false; }
+  dislikeMotion.lastTrackedAt = now;
   const wristX = (wrist.x - chin.x) / faceWidth;
   const wristY = (wrist.y - chin.y) / scale;
   const indexX = (points[8].x - chin.x) / faceWidth;
   const indexY = (points[8].y - chin.y) / scale;
   const side = Math.sign(wrist.x - points[8].x);
   const [index, middle, ring, pinky] = [8, 12, 16, 20].map(tip => fingerBendAngle(points, tip));
-  const pointingAcross = Math.abs(wristX) < .8 && wristY > .83 && wristY < 2.58
-    && indexY > .63 && indexY < 2.16 && side * indexX < -.22
-    && Math.abs(wrist.y - points[8].y) < palm * .86
-    && Math.abs(wrist.x - points[8].x) * aspect > palm * 1.05
-    && index > 150 && middle < 118 && ring < 115 && pinky < 115;
+  const pointingAcross = side * wristX > -.15 && side * wristX < 1.15 && wristY > .83 && wristY < 2.58
+    && indexY > .63 && indexY < 2.2 && side * indexX < .4
+    && Math.abs(wrist.y - points[8].y) < palm * 1.15
+    && Math.abs(wrist.x - points[8].x) * aspect > palm * .9
+    && index > 145 && middle < 128 && ring < 120 && pinky < 120;
+  const palmX = (points[9].x - chin.x) / faceWidth;
   const palmY = (points[9].y - chin.y) / scale;
-  const openFan = wristY > .75 && wristY < 2.0 && palmY > .48 && palmY < 1.58
-    && wrist.y - points[12].y > palm * .64
-    && handMetricDistance(points[8], points[20]) > palm * 1.04
-    && [index, middle, ring, pinky].every(angle => angle > 145);
+  const openFingers = [index, middle, ring, pinky].filter(angle => angle > 138).length;
+  const openFan = wristY > .75 && wristY < 2.15 && palmY > .48 && palmY < 1.72
+    && wrist.y - points[12].y > palm * .52
+    && handMetricDistance(points[8], points[20]) > palm * .92
+    && openFingers >= 3;
   if (dislikeMotion.latched) {
     if (openFan) return true;
     resetDislikeMotion();
   }
   if (pointingAcross) {
     const start = dislikeMotion.start;
-    if (!start || start.side !== side || now - start.at > 1200 || side * indexX < side * start.indexX) {
-      dislikeMotion.start = { side, indexX, wristX, at: now };
-    }
-  }
-  const start = dislikeMotion.start;
-  const wristMoved = start && start.side * (wristX - start.wristX) > .32;
-  const palmMoved = start && start.side * (points[9].x - chin.x) > faceWidth * .23;
-  if (!openFan || !start || now - start.at > 1450 || !wristMoved || !palmMoved) {
-    dislikeMotion.openSince = null;
+    const samePoint = start?.side === side && now - start.at <= 1750;
+    if (samePoint && side * indexX >= side * start.indexX) start.at = now;
+    else dislikeMotion.start = { side, indexX, wristX, palmX, at: now };
     return false;
   }
-  dislikeMotion.openSince ??= now;
-  if (now - dislikeMotion.openSince < 120) return false;
+  const start = dislikeMotion.start;
+  if (!start) return false;
+  if (now - start.at > 1750) {
+    dislikeMotion.start = null;
+    return false;
+  }
+  if (!openFan || start.side * (wristX - start.wristX) < .17
+    || start.side * (palmX - start.palmX) < .30 || start.side * palmX < .12) return false;
   dislikeMotion.latched = announce('ไม่ชอบ', now);
   return true;
 }
@@ -873,6 +877,7 @@ function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
   const bothHandsActive = previousPairActive || fearActive;
   const singleHand = !bothHandsActive && hands.length === 1 ? hands[0] : null;
   const faceSignActive = detectFaceSigns(singleHand, face, now);
+  if (faceSignActive || hands.length > 1) resetDislikeMotion();
   const dislikeActive = detectDislike(faceSignActive ? null : singleHand, face, now);
   const otherSignActive = bothHandsActive || faceSignActive || dislikeActive;
   if (helloActive || wellActive) { state.loveSince = 0; if (now - loveHold.lastValid > 600) loveHold.latched = false; }
@@ -958,7 +963,7 @@ const practiceStepGuides = {
   'ร้องไห้': ['ชูนิ้วชี้กับนิ้วกลางเป็นรูป V ใกล้ตาตามคลิป', 'พบจังหวะเริ่มแล้ว · เลื่อนสองนิ้วลงตามแนวใบหน้า'],
   'ยิ้ม': ['วางปลายนิ้วทั้งสองมือใกล้กลางปากตามคลิป', 'พบจังหวะเริ่มแล้ว · แยกสองมือออกไปทางแก้ม', 'พบจังหวะแยกมือแล้ว · ค้างสักครู่'],
   'กลัว': ['ยกกำปั้นทั้งสองจากช่วงอกขึ้นมาใกล้ใต้คางตามคลิป', 'พบกำปั้นใกล้คางแล้ว · เก็บนิ้วโป้งแล้วค้างสักครู่'],
-  'ไม่ชอบ': ['ชี้นิ้วข้ามหน้าอกไปด้านข้างตามคลิป', 'พบจังหวะชี้แล้ว · เคลื่อนมือกลับแล้วกางนิ้วออก', 'พบจังหวะกางนิ้วแล้ว · ค้างสักครู่'],
+  'ไม่ชอบ': ['ใช้นิ้วชี้ชี้เฉียงเข้าหากลางอกตามคลิป', 'พบจังหวะชี้แล้ว · ดึงมือกลับไปด้านเดิมเล็กน้อยพร้อมกางนิ้ว'],
   'รัก': ['วางมือแบทั้งสองไขว้กันที่อกตามคลิป', 'พบมือไขว้ที่อกแล้ว · ค้างสักครู่'],
   'ไม่สบาย': ['วางหลังมือใกล้หน้าผากตามคลิป', 'พบจังหวะเริ่มแล้ว · ขยับหลังมือให้ชิดหน้าผาก', 'พบมือใกล้หน้าผากแล้ว · ค้างสักครู่'],
   'ช่วยฉันด้วย': ['กางมือให้นิ้วชิดกัน หันฝ่ามือเข้ากล้องตามคลิป', 'พบมือกางแล้ว · ค้างสักครู่', 'พบจังหวะเริ่มแล้ว · พับนิ้วโป้งเข้าฝ่ามือ', 'พบจังหวะพับนิ้วโป้งแล้ว · กำมือทับนิ้วโป้ง']
@@ -979,7 +984,7 @@ function currentPracticeStep(now) {
     case 'ร้องไห้': return cryMotion.start ? 1 : 0;
     case 'ยิ้ม': return smileMotion.finishSince ? 2 : smileMotion.start ? 1 : 0;
     case 'กลัว': return fearMotion.holdSince !== null ? 1 : 0;
-    case 'ไม่ชอบ': return dislikeMotion.openSince !== null ? 2 : dislikeMotion.start ? 1 : 0;
+    case 'ไม่ชอบ': return dislikeMotion.start ? 1 : 0;
     case 'รัก': return state.loveSince ? 1 : 0;
     case 'ไม่สบาย': return state.sickHoldSince ? 2 : state.sickStage ? 1 : 0;
     case 'ช่วยฉันด้วย': return state.sosStage ? state.sosStage + 1 : state.sosHoldSince ? 1 : 0;
