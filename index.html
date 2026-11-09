@@ -114,7 +114,8 @@
               <div class="practice-test-actions"><button id="practice-test-start" type="button" class="primary">เริ่มครั้งที่ 1</button><button id="practice-test-cancel" type="button" class="secondary" hidden>ยกเลิกครั้งนี้</button></div>
             </section>
             <div class="camera-wrap"><div class="camera-live-label" aria-hidden="true"><i></i> CAMERA</div><video id="camera-video" autoplay muted playsinline></video><div id="camera-placeholder" class="camera-placeholder">แตะ “เปิดกล้อง” เพื่อเริ่มแปล</div><div id="gesture-live-caption" class="gesture-live-caption" hidden></div></div>
-            <div class="camera-controls"><button id="camera-start" class="primary" type="button">เปิดกล้อง</button><button id="camera-stop" class="secondary" type="button" hidden>ปิดกล้อง</button></div>
+            <p id="camera-before-tip" class="camera-before-tip">แนะนำให้ใช้ <strong>มือขวา</strong> สำหรับท่าที่ใช้มือเดียว</p>
+            <div class="camera-controls"><button id="camera-start" class="primary" type="button" aria-describedby="camera-before-tip">เปิดกล้อง</button><button id="camera-stop" class="secondary" type="button" hidden>ปิดกล้อง</button></div>
             <div id="camera-framing" class="camera-framing" hidden data-level="info">
               <div class="camera-tracking-chips" aria-label="สถานะภาพกล้อง"><span id="camera-face-chip" data-found="false">○ ยังไม่พบใบหน้า</span><span id="camera-hand-chip" data-found="false">○ ยังไม่พบมือ</span><span id="camera-chest-chip" data-found="false">○ ยังไม่เห็นช่วงอกชัดเจน</span></div>
               <p id="camera-guidance" role="status" aria-live="polite">กำลังตรวจใบหน้า มือ และช่วงอก…</p>

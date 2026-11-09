@@ -126,6 +126,13 @@ body{background:#f4f8fc;background-image:radial-gradient(ellipse at 85% 0%,#e2ef
 .video-coverage p { margin: 0 0 8px; }
 .video-coverage-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .video-results-coverage { margin: 0 0 10px; }
+.camera-before-tip {
+  margin: 12px 0 0;
+  color: #254b70;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.camera-wrap[data-camera-state="ready"] + .camera-before-tip { display: none; }
 .camera-setup-dialog[open] {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
