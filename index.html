@@ -23,12 +23,13 @@
       <div id="welcome-step-2" class="welcome-step" hidden>
         <span class="eyebrow">ขั้นตอน 2 จาก 2 · อุปกรณ์ที่แนะนำ</span>
         <h1 id="welcome-device-title">อุปกรณ์ที่แนะนำในขณะนี้</h1>
-        <p id="welcome-device-message">แนะนำให้ใช้ผ่านอุปกรณ์ที่มีกล้องและเปิดเว็บไซต์ด้วยเว็บเบราว์เซอร์ที่รองรับ</p>
+        <p id="welcome-device-message">แนะนำ iPad โน้ตบุ๊ก คอมพิวเตอร์ หรือแท็บเล็ตที่มีกล้อง หากใช้งานผ่านโทรศัพท์ ให้เลือก “โทรศัพท์”</p>
         <div class="welcome-devices" role="group" aria-label="เลือกอุปกรณ์ที่ใช้">
           <button class="welcome-device" type="button" data-recommended-device="ipad" aria-pressed="false">📱 iPad</button>
           <button class="welcome-device" type="button" data-recommended-device="laptop" aria-pressed="false">💻 โน้ตบุ๊ก</button>
           <button class="welcome-device" type="button" data-recommended-device="computer" aria-pressed="false">🖥 คอมพิวเตอร์</button>
           <button class="welcome-device" type="button" data-recommended-device="tablet" aria-pressed="false">📲 แท็บเล็ต</button>
+          <button class="welcome-device" type="button" data-recommended-device="phone" aria-pressed="false">📱 โทรศัพท์</button>
         </div>
         <p id="welcome-device-selection" class="welcome-device-selection" aria-live="polite">กรุณาเลือกอุปกรณ์ที่กำลังใช้งาน</p>
         <div class="welcome-actions"><button id="welcome-back" class="secondary" type="button">← ย้อนกลับ</button><button id="welcome-enter" class="primary" type="button" disabled>เข้าใช้งานเว็บไซต์</button></div>
@@ -46,7 +47,7 @@
   <main id="main-content" class="page" inert>
     <header class="intro app-header">
       <a class="brand" href="#" id="brand-home" aria-label="มือพูด กลับหน้าแรก"><span class="brand-symbol" aria-hidden="true">✋</span><span><strong>มือพูด<span class="brand-dot">.</span></strong><small>เว็บไซต์แปลภาษามือแบบสองทิศทาง</small></span></a>
-      <div class="header-actions"><button id="home-button" type="button" class="secondary">หน้าแรก</button><button id="motion-toggle" type="button" class="motion-toggle" aria-pressed="false">ลดการเคลื่อนไหว</button></div>
+      <div class="header-actions"><button id="home-button" type="button" class="secondary">หน้าแรก</button><button id="show-help" type="button" class="secondary" aria-haspopup="dialog">ดูวิธีใช้</button><button id="motion-toggle" type="button" class="motion-toggle" aria-pressed="false">ลดการเคลื่อนไหว</button></div>
     </header>
     <section class="home-hero" aria-labelledby="home-title">
       <div class="hero-copy"><span class="hero-eyebrow"><i></i> เชื่อมทุกการสื่อสาร ด้วยมือของเรา</span><h1 id="home-title" tabindex="-1">ให้ทุกท่าทาง<br>มี<span>ความหมาย</span></h1><p>จากเสียงพูดสู่ภาษามือ จากท่าทางสู่เสียงพูด<br>เริ่มฝึกท่าให้คุ้นเคย แล้วค่อยเลือกวิธีสื่อสารของคุณ</p><button id="practice-home" class="practice-home" type="button" aria-label="เริ่มฝึกภาษามือทีละคำ แนะนำสำหรับการใช้งานครั้งแรก"><span class="practice-start-badge">◎ แนะนำให้เริ่มที่นี่</span><span class="practice-start-copy"><strong>เริ่มต้นด้วยการฝึกทีละคำ</strong><small>ดูคลิปตัวอย่าง แล้วลองทำตามให้กล้องตรวจจับ<br>ฝึกให้คุ้นเคย ก่อนใช้ระบบแปลภาษามือ</small></span><span class="practice-start-footer"><span class="practice-start-steps">เลือกคำ → ดูคลิป → ลองทำท่า</span><span class="practice-start-action">เริ่มฝึกเลย <span aria-hidden="true">→</span></span></span></button><div class="hero-note"><span aria-hidden="true">↔</span> สองวิธีสื่อสาร ในเว็บไซต์เดียว</div></div>
@@ -60,16 +61,7 @@
 
     <section id="video-system" class="system-panel" role="tabpanel" aria-labelledby="video-tab">
       <header class="system-heading"><span class="eyebrow">VIDEO SYSTEM</span><h2>ค้นหาวิดีโอภาษามือ</h2><p>พิมพ์หรือพูดคำที่ต้องการ แล้วระบบจะแสดงคลิปที่ตรงกัน</p></header>
-      <div class="layout">
-        <div class="left-column">
-          <article class="card player-card">
-            <div class="card-heading"><div><span class="eyebrow">SIGN VIDEO</span><h2>วิดีโอภาษามือ</h2></div><span class="video-count" id="video-count">พร้อมใช้งาน</span></div>
-            <div class="player-wrap" id="player-wrap"><div class="empty-player"><span class="play-icon">▶</span><b>วิดีโอจะแสดงตรงนี้</b><span>ลองพิมพ์ “สวัสดี” แล้วกดส่ง</span></div><video id="sign-video" playsinline preload="metadata" hidden></video><button id="video-play-overlay" class="video-play-overlay" type="button" hidden>▶ แตะเพื่อเล่นคลิป</button><button id="video-expand-button" class="video-expand-button" type="button" aria-label="ขยายวิดีโอ" aria-pressed="false" hidden>⛶</button></div>
-            <div class="now-playing" id="now-playing">ยังไม่ได้เลือกคำ</div>
-            <div id="result-list" class="result-list" aria-live="polite"></div>
-          </article>
-        </div>
-        <div class="side-column">
+      <div class="layout video-layout">
           <article class="card input-card">
             <span class="eyebrow">VIDEO SEARCH</span><h2>พูดหรือพิมพ์ข้อความ</h2>
             <label class="input-label" for="text-input">คำหรือประโยคที่ต้องการค้นหา</label><div class="input-row"><input id="text-input" type="text" placeholder="เช่น สวัสดี, ฉันหิว" autocomplete="off"><button id="send-button" class="primary" type="button">ค้นหา</button></div>
@@ -78,15 +70,25 @@
             <button id="mic-button" class="mic-button" type="button"><span aria-hidden="true">🎙</span> แตะเพื่อพูด</button>
             <p id="mic-transcript" class="mic-transcript" aria-live="polite" hidden></p>
             <p id="status" class="status" role="status" aria-live="polite">พิมพ์ข้อความ หรือแตะปุ่มไมโครโฟนเพื่อค้นหาคลิป</p>
+            <div id="video-coverage" class="video-coverage" role="group" aria-labelledby="video-coverage-message" tabindex="-1" hidden>
+              <p id="video-coverage-message" role="status"></p>
+              <div class="video-coverage-actions"><button id="video-play-partial" class="primary" type="button">ดูเฉพาะท่าที่มี</button><button id="video-edit-search" class="secondary" type="button">แก้ข้อความ</button></div>
+            </div>
             <label class="consent"><input id="mic-consent" type="checkbox"> อนุญาตใช้ไมโครโฟนเพื่อถอดเสียงผ่านบริการของเบราว์เซอร์</label>
             <p class="mic-help">iPhone/iPad: เปิดลิงก์ด้วย Safari และเปิด Siri ในการตั้งค่า หากไมค์ยังเริ่มฟังไม่ได้</p>
+          </article>
+          <article class="card player-card" aria-labelledby="video-results-title">
+            <div class="card-heading"><div><span class="eyebrow">SIGN VIDEO</span><h2 id="video-results-title" tabindex="-1">วิดีโอภาษามือ</h2></div><span class="video-count" id="video-count">พร้อมใช้งาน</span></div>
+            <p id="video-results-coverage" class="video-results-coverage" hidden></p>
+            <div class="player-wrap" id="player-wrap"><div class="empty-player"><span class="play-icon">▶</span><b>วิดีโอจะแสดงตรงนี้</b><span>ลองพิมพ์ “สวัสดี” แล้วกดค้นหา</span></div><video id="sign-video" playsinline preload="metadata" hidden></video><button id="video-play-overlay" class="video-play-overlay" type="button" hidden>▶ แตะเพื่อเล่นคลิป</button><button id="video-expand-button" class="video-expand-button" type="button" aria-label="ขยายวิดีโอ" aria-pressed="false" hidden>⛶</button></div>
+            <div class="now-playing" id="now-playing">ยังไม่ได้เลือกคำ</div>
+            <div id="result-list" class="result-list" aria-live="polite"></div>
           </article>
           <article class="card voice-card">
             <div><span class="eyebrow">SPEECH</span><h2>เสียงพูด</h2></div>
             <p>ทดสอบเสียงภาษาไทย</p>
             <button id="speak-button" class="secondary" type="button">🔊 ทดสอบเสียง</button>
           </article>
-        </div>
       </div>
       <details class="card vocabulary-card" open>
         <summary><span>คำศัพท์และประโยคที่มีคลิปวิดีโอ</span><span id="vocabulary-count" class="video-count">กำลังโหลดรายการ…</span></summary>

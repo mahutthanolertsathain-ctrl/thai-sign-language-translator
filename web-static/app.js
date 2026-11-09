@@ -1,4 +1,6 @@
 let WORD_TO_VIDEO = {};
+let videoAliases = new Map();
+let maxVideoAliasLength = 0;
 let currentMode = 'all';
 let queue = [];
 let isPlaying = false;
@@ -9,7 +11,9 @@ let recognitionHadFinal = false;
 let recognitionHadError = false;
 let lastInterimTranscript = '';
 let lastSubmittedTranscript = '';
-let lastResults = [];
+let pendingVideoResults = null;
+let videoPlaybackId = 0;
+let vocabularyReady = false;
 const SIGN_SENTENCE_DELAY_MS = 2250;
 let signSentenceBuffer = [];
 let signSentenceTimer = null;
@@ -36,30 +40,67 @@ let practiceTestStorageAvailable = true;
 
 const el = (id) => document.getElementById(id);
 const normalize = (value) => (value || '').toLocaleLowerCase('th').replace(/[\sๆฯ,.!?…]/g, '');
+const thaiWords = typeof Intl.Segmenter === 'function' ? new Intl.Segmenter('th', { granularity: 'word' }) : null;
+const stackedVideoLayout = window.matchMedia('(max-width: 820px)');
 
-document.body.classList.add('welcome-open');
+const welcomeDevices = [...document.querySelectorAll('[data-recommended-device]')];
+const welcomeStorageKey = 'muepood-welcome-v1';
+let welcomePreferences = {};
+try { welcomePreferences = JSON.parse(localStorage.getItem(welcomeStorageKey)) || {}; } catch (_) {}
+let selectedDevice = welcomeDevices.find((button) => button.dataset.recommendedDevice === welcomePreferences.device);
+const seenGuides = new Set(selectedDevice && Array.isArray(welcomePreferences.guides) ? welcomePreferences.guides : []);
+
+function saveWelcomePreferences() {
+  try { localStorage.setItem(welcomeStorageKey, JSON.stringify({ device: selectedDevice.dataset.recommendedDevice, guides: [...seenGuides] })); } catch (_) {}
+}
+
 let pendingSystemId = null;
+let guideReturnFocus = null;
 const systemGuides = {
   'video-system': {
     title: 'วิธีใช้ระบบวิดีโอภาษามือ',
-    message: 'พิมพ์คำหรือแตะปุ่มไมโครโฟนเพื่อพูดคำที่ต้องการ จากนั้นกด “ค้นหา” แล้วแตะปุ่มเล่นเพื่อดูคลิป หรือแตะปุ่มขยายเพื่อดูเต็มจอ หากใช้ไมโครโฟน ให้กดอนุญาตเมื่อเบราว์เซอร์ถาม',
+    message: 'พิมพ์แล้วกด “ค้นหา” หรือแตะไมโครโฟนเพื่อพูดคำที่ต้องการ หากมีคำที่ยังไม่มีคลิป ให้เลือกดูเฉพาะท่าที่มีหรือแก้ข้อความ แตะปุ่มขยายเพื่อดูคลิปเต็มจอ หากใช้ไมโครโฟน ให้กดอนุญาตเมื่อเบราว์เซอร์ถาม',
   },
   'gesture-system': {
     title: 'วิธีใช้ระบบจับท่าทางภาษามือ',
     message: 'กด “เปิดกล้อง” อ่านคำแนะนำแล้วแตะ “พร้อมแล้ว เปิดกล้อง” ระบบจะเตรียมเสียงให้อัตโนมัติ จากนั้นอนุญาตให้เว็บไซต์ใช้กล้อง จัดภาพให้เห็นใบหน้า มือ และลำตัวช่วงอกชัดเจน แนะนำให้ใช้มือขวาทำทีละท่า (ท่า “รัก” “สวัสดี” “สบายดี” “ยิ้ม” และ “กลัว” ใช้สองมือ) ระบบจะรอประมาณ 2.25 วินาทีหลังท่าล่าสุดเพื่อให้ต่อคำเป็นประโยคก่อนพูด',
   },
+  practice: {
+    title: 'วิธีใช้โหมดฝึกทีละคำ',
+    message: 'เลือกคำที่ต้องการฝึก แล้วกดดูคลิปตัวอย่าง จากนั้นกด “เปิดกล้อง” ลดมือให้พ้นภาพสักครู่ก่อนเริ่มทำท่า เมื่อระบบตรวจพบคำที่เลือกจะแสดงว่าฝึกสำเร็จ กดฝึกซ้ำหรือไปคำถัดไปได้ โดยโหมดนี้จะไม่ต่อคำเป็นประโยค',
+  },
 };
-function showSystemGuide(systemId, isInitial = false) {
-  const guide = pendingPractice && systemId === 'gesture-system' ? { title: 'วิธีใช้โหมดฝึกทีละคำ', message: 'เลือกคำที่ต้องการฝึก แล้วกดดูคลิปตัวอย่าง จากนั้นกด “เปิดกล้อง” ลดมือให้พ้นภาพสักครู่ก่อนเริ่มทำท่า เมื่อระบบตรวจพบคำที่เลือกจะแสดงว่าฝึกสำเร็จ กดฝึกซ้ำหรือไปคำถัดไปได้ โดยโหมดนี้จะไม่ต่อคำเป็นประโยค' } : systemGuides[systemId];
-  if (!guide) return;
+function openGuide(guide, systemId = null) {
   pendingSystemId = systemId;
+  guideReturnFocus = document.activeElement;
   el('system-guide-title').textContent = guide.title;
   el('system-guide-message').textContent = guide.message;
-  el('system-guide-back').hidden = isInitial;
+  el('system-guide-back').hidden = !systemId;
+  el('system-guide-enter').textContent = systemId ? 'เข้าใช้งานระบบนี้' : 'ปิดวิธีใช้';
   el('main-content').inert = true;
   el('system-guide').hidden = false;
   document.body.classList.add('welcome-open');
   el('system-guide-enter').focus();
+}
+function showSystemGuide(systemId) {
+  const guideKey = pendingPractice ? 'practice' : systemId;
+  if (seenGuides.has(guideKey)) enterSystem(systemId);
+  else openGuide(systemGuides[guideKey], systemId);
+}
+function closeGuide() {
+  el('system-guide').hidden = true;
+  document.body.classList.remove('welcome-open');
+  el('main-content').inert = false;
+  pendingSystemId = null;
+}
+function enterSystem(systemId) {
+  activateSystem(systemId);
+  if (pendingPractice) setPracticeMode(true);
+  pendingPractice = false;
+  if (practiceMode && systemId === 'gesture-system') {
+    el('practice-word').focus({ preventScroll: true });
+    document.querySelector('.gesture-mode-switch').scrollIntoView({ block: 'start', behavior: 'auto' });
+  } else document.querySelector(`[data-system-target="${systemId}"]`)?.focus();
 }
 function activateSystem(systemId) {
   if (systemId !== 'gesture-system' && practiceMode) setPracticeMode(false);
@@ -95,9 +136,10 @@ function showWelcomeStep(stepNumber) {
 }
 el('welcome-next').addEventListener('click', () => showWelcomeStep(2));
 el('welcome-back').addEventListener('click', () => showWelcomeStep(1));
-document.querySelectorAll('[data-recommended-device]').forEach((deviceButton) => {
+welcomeDevices.forEach((deviceButton) => {
   deviceButton.addEventListener('click', () => {
-    document.querySelectorAll('[data-recommended-device]').forEach((button) => {
+    selectedDevice = deviceButton;
+    welcomeDevices.forEach((button) => {
       const selected = button === deviceButton;
       button.setAttribute('aria-pressed', String(selected));
       button.classList.toggle('selected', selected);
@@ -108,34 +150,42 @@ document.querySelectorAll('[data-recommended-device]').forEach((deviceButton) =>
   });
 });
 el('welcome-enter').addEventListener('click', () => {
-  if (!document.querySelector('[data-recommended-device][aria-pressed="true"]')) return;
+  if (!selectedDevice) return;
+  saveWelcomePreferences();
   el('welcome-gate').hidden = true;
   document.body.classList.remove('welcome-open');
   el('main-content').inert = false;
   el('home-title').focus({ preventScroll: true });
   window.scrollTo({ top: 0, behavior: 'auto' });
 });
-el('welcome-next').focus();
-el('system-guide-back').addEventListener('click', () => {
-  el('system-guide').hidden = true;
-  document.body.classList.remove('welcome-open');
+if (selectedDevice) {
+  el('welcome-gate').hidden = true;
   el('main-content').inert = false;
-  document.querySelector('[data-system-target].active')?.focus();
-  pendingSystemId = null; pendingPractice = false;
-});
+} else {
+  document.body.classList.add('welcome-open');
+  el('welcome-next').focus();
+}
+function dismissGuide() {
+  closeGuide();
+  pendingPractice = false;
+  guideReturnFocus?.focus({ preventScroll: true });
+}
+el('system-guide-back').addEventListener('click', dismissGuide);
 el('system-guide-enter').addEventListener('click', () => {
   const systemId = pendingSystemId;
-  el('system-guide').hidden = true;
-  document.body.classList.remove('welcome-open');
-  el('main-content').inert = false;
-  pendingSystemId = null;
-  if (systemId) activateSystem(systemId);
-  if (pendingPractice && systemId === 'gesture-system') setPracticeMode(true);
-  pendingPractice = false;
-  if (practiceMode && systemId === 'gesture-system') {
-    el('practice-word').focus({ preventScroll: true });
-    document.querySelector('.gesture-mode-switch').scrollIntoView({ block: 'start', behavior: 'auto' });
-  } else document.querySelector(`[data-system-target="${systemId}"]`)?.focus();
+  if (!systemId) { dismissGuide(); return; }
+  seenGuides.add(pendingPractice ? 'practice' : systemId);
+  saveWelcomePreferences();
+  closeGuide();
+  enterSystem(systemId);
+});
+el('show-help').addEventListener('click', () => {
+  const activeSystem = document.querySelector('[data-system-target].active')?.dataset.systemTarget;
+  const key = practiceMode ? 'practice' : activeSystem;
+  openGuide(systemGuides[key] || {
+    title: 'วิธีใช้เว็บไซต์มือพูด',
+    message: 'เริ่มที่ “ฝึกทีละคำ” เพื่อดูคลิปแล้วลองทำตาม เลือก “พูดหรือพิมพ์ → ดูภาษามือ” เพื่อค้นหาคลิป หรือเลือก “ทำท่า → ฟังเสียงพูด” เพื่อใช้กล้องแปลท่าที่รองรับ เว็บไซต์ยังเป็นต้นแบบและตรวจจับได้บางคำ',
+  });
 });
 
 function refreshThaiSpeechVoice() {
@@ -183,6 +233,9 @@ async function loadVocabulary() {
   const response = await fetch('/web-static/vocabulary.json');
   if (!response.ok) throw new Error('load vocabulary failed');
   WORD_TO_VIDEO = await response.json();
+  videoAliases = new Map(Object.entries(WORD_TO_VIDEO).map(([alias, file]) => [normalize(alias), { alias, file }]));
+  maxVideoAliasLength = Math.max(0, ...Array.from(videoAliases.keys(), (alias) => alias.length));
+  vocabularyReady = true;
   const uniqueClips = new Set(Object.values(WORD_TO_VIDEO));
   el('video-count').textContent = `${uniqueClips.size} คลิป`;
   const aliases = Object.keys(WORD_TO_VIDEO).sort((a, b) => a.localeCompare(b, 'th'));
@@ -221,23 +274,31 @@ async function loadVocabulary() {
 }
 
 function findVideos(text) {
-  const source = normalize(text);
+  const words = thaiWords
+    ? Array.from(thaiWords.segment(text)).filter(({ isWordLike }) => isWordLike).map(({ segment }) => segment)
+    : text.match(/[\p{L}\p{M}\p{N}]+/gu) || [];
+  const tokens = words.map((word) => ({ word, key: normalize(word) })).filter(({ key }) => key);
   const matches = [];
-  const aliases = Object.keys(WORD_TO_VIDEO).sort((a, b) => b.length - a.length);
-  let cursor = 0;
-  while (cursor < source.length) {
-    let found = null;
-    for (const alias of aliases) {
-      const key = normalize(alias);
-      const position = source.indexOf(key, cursor);
-      if (position === cursor && key) { found = { alias, key, file: WORD_TO_VIDEO[alias] }; break; }
+  const missing = [];
+  for (let start = 0; start < tokens.length;) {
+    let key = '';
+    let matchedEnd = start;
+    let match;
+    for (let end = start; end < tokens.length; end += 1) {
+      key += tokens[end].key;
+      if (key.length > maxVideoAliasLength) break;
+      const candidate = videoAliases.get(key);
+      if (candidate) { match = candidate; matchedEnd = end + 1; }
     }
-    if (found) {
-      if (!matches.length || matches[matches.length - 1].file !== found.file) matches.push(found);
-      cursor += found.key.length;
-    } else cursor += 1;
+    if (!match) {
+      missing.push(tokens[start].word);
+      start += 1;
+      continue;
+    }
+    if (matches.at(-1)?.file !== match.file) matches.push(match);
+    start = matchedEnd;
   }
-  return matches;
+  return { matches, missing: [...new Set(missing)] };
 }
 
 function arrangeVideosForThaiSignGrammar(matches) {
@@ -260,25 +321,78 @@ function arrangeVideosForThaiSignGrammar(matches) {
   return { matches: arranged, reorderedClauses };
 }
 
-function submitText(text = el('text-input').value, { keepInput = false } = {}) {
+function hideVideoCoverage() {
+  pendingVideoResults = null;
+  el('video-coverage').hidden = true;
+}
+
+function clearVideoResults() {
+  videoPlaybackId += 1;
+  queue = [];
+  isPlaying = false;
+  const player = el('sign-video');
+  player.onloadedmetadata = player.onplay = player.onended = player.onerror = null;
+  player.pause();
+  if (player.hasAttribute('src')) { player.removeAttribute('src'); player.load(); }
+  player.hidden = true;
+  const wrap = el('player-wrap');
+  wrap.querySelector('.empty-player').hidden = false;
+  wrap.style.aspectRatio = '';
+  const expandButton = el('video-expand-button');
+  if (wrap.classList.contains('expanded')) expandButton.click();
+  expandButton.hidden = true;
+  el('video-play-overlay').hidden = true;
+  el('now-playing').textContent = 'ยังไม่ได้เลือกคำ';
+  el('result-list').replaceChildren();
+  el('video-results-coverage').hidden = true;
+}
+
+function submitText(text = el('text-input').value) {
   const value = (text || '').trim();
   if (!value) return;
-  el('text-input').value = keepInput ? value : '';
-  el('status').textContent = `รับข้อความ: ${value}`;
-  const { matches, reorderedClauses } = arrangeVideosForThaiSignGrammar(findVideos(value));
-  lastResults = matches;
+  el('text-input').value = value;
+  hideVideoCoverage();
+  clearVideoResults();
+  if (!vocabularyReady) {
+    el('status').textContent = 'รายการคลิปยังไม่พร้อม ลองค้นหาอีกครั้งหรือรีเฟรชหน้า';
+    return;
+  }
+  const { matches, missing } = findVideos(value);
+  if (!matches.length || missing.length) {
+    const missingText = (missing.length ? missing : [value]).map((word) => `“${word}”`).join(' ');
+    const message = `ยังไม่มีคลิปสำหรับ ${missingText}`;
+    pendingVideoResults = matches.length ? { matches, message } : null;
+    el('video-play-partial').hidden = !pendingVideoResults;
+    el('status').textContent = matches.length ? `พบ ${matches.length} ท่า · มีคำที่ยังไม่มีคลิป` : 'ไม่พบคลิปสำหรับข้อความนี้';
+    const warning = el('video-coverage');
+    warning.hidden = false;
+    el('video-coverage-message').textContent = message;
+    if (stackedVideoLayout.matches) {
+      warning.focus({ preventScroll: true });
+      warning.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    }
+    return;
+  }
+  const arranged = arrangeVideosForThaiSignGrammar(matches);
+  playVideoResults(arranged.matches, arranged.reorderedClauses);
+}
+
+function playVideoResults(matches, reorderedClauses = 0, partialMessage = '') {
   el('result-list').replaceChildren(...matches.map(({alias}) => {
     const chip = document.createElement('span'); chip.className = 'result-chip'; chip.textContent = alias; return chip;
   }));
-  if (!matches.length) {
-    el('status').textContent = `ยังไม่มีวิดีโอสำหรับ “${value}” ลองพิมพ์คำสั้น ๆ เช่น สวัสดี, หิว, รัก`;
-    return;
-  }
-  queue.push(...matches);
-  el('status').textContent = reorderedClauses
-    ? `จัด ${reorderedClauses} ประโยคเป็นลำดับกรรม–ประธาน–กริยาแล้ว · พบ ${matches.length} ท่า กำลังเล่นวิดีโอ`
-    : `พบ ${matches.length} ท่า กำลังเล่นวิดีโอ`;
+  const coverage = el('video-results-coverage');
+  coverage.hidden = !partialMessage;
+  coverage.textContent = partialMessage ? `กำลังแสดงเฉพาะท่าที่มี · ${partialMessage}` : '';
+  queue = [...matches];
+  el('status').textContent = partialMessage ? `กำลังเล่นเฉพาะ ${matches.length} ท่าที่มีคลิป` : reorderedClauses
+    ? `พบคลิปครบ · เรียงท่าตามรูปแบบประโยคที่ระบบรองรับ · ${matches.length} ท่า`
+    : `พบคลิปครบ · ${matches.length} ท่า`;
   playNext();
+  if (stackedVideoLayout.matches) {
+    el('video-results-title').focus({ preventScroll: true });
+    el('video-results-title').closest('.player-card').scrollIntoView({ block: 'start', behavior: 'instant' });
+  }
 }
 
 function handleSignDetected(word) {
@@ -319,6 +433,7 @@ function flushSignSentence() {
 
 function playNext() {
   if (isPlaying || !queue.length) return;
+  const playbackId = ++videoPlaybackId;
   isPlaying = true;
   const item = queue.shift();
   const player = el('sign-video');
@@ -329,7 +444,6 @@ function playNext() {
   emptyPlayer.hidden = true;
   playOverlay.hidden = true;
   expandButton.hidden = false;
-  player.src = `/web-static/videos/${encodeURIComponent(item.file)}`;
   player.hidden = false;
   player.onloadedmetadata = () => {
     if (player.videoWidth && player.videoHeight) {
@@ -354,9 +468,12 @@ function playNext() {
     el('status').textContent = `เปิดวิดีโอ “${item.alias}” ไม่ได้`;
     if (queue.length) playNext();
   };
+  player.src = `/web-static/videos/${encodeURIComponent(item.file)}`;
   player.play().then(() => {
+    if (playbackId !== videoPlaybackId) return;
     playOverlay.hidden = true;
   }).catch(() => {
+    if (playbackId !== videoPlaybackId) return;
     isPlaying = false;
     playOverlay.hidden = false;
     el('status').textContent = `คลิป “${item.alias}” พร้อมเล่น แตะปุ่มเล่นบนวิดีโอ`;
@@ -529,7 +646,7 @@ function startListening() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) { el('status').textContent = 'เบราว์เซอร์นี้ไม่รองรับการถอดเสียงบนเว็บนี้ ลองเปิดลิงก์ด้วย Safari แล้วเปิด Siri หรือพิมพ์ข้อความแทน'; return; }
   if (!recognition) {
-    recognition = new SpeechRecognition(); recognition.lang = 'th-TH'; recognition.continuous = false; recognition.interimResults = true; recognition.maxAlternatives = 5;
+    recognition = new SpeechRecognition(); recognition.lang = 'th-TH'; recognition.continuous = false; recognition.interimResults = true;
     recognition.onstart = () => {
       recognitionStarting = false;
       recognitionActive = true;
@@ -548,16 +665,16 @@ function startListening() {
       const interimParts = [];
       for (let index = 0; index < event.results.length; index += 1) {
         const result = event.results[index];
-        const alternatives = [];
+        let transcript = '';
         for (let alternativeIndex = 0; alternativeIndex < result.length; alternativeIndex += 1) {
-          alternatives.push(result[alternativeIndex].transcript || '');
+          transcript = result[alternativeIndex].transcript?.trim() || '';
+          if (transcript) break;
         }
-        const transcript = alternatives.sort((a, b) => findVideos(b).length - findVideos(a).length || b.length - a.length)[0] || '';
         if (result.isFinal) finalParts.push(transcript);
         else interimParts.push(transcript);
       }
-      const finalTranscript = finalParts.join('').trim();
-      const interimTranscript = interimParts.join('').trim();
+      const finalTranscript = finalParts.join(' ').trim();
+      const interimTranscript = interimParts.join(' ').trim();
       if (interimTranscript) {
         lastInterimTranscript = interimTranscript;
         if (!finalTranscript) {
@@ -570,7 +687,7 @@ function startListening() {
         lastSubmittedTranscript = finalTranscript;
         el('mic-transcript').hidden = false;
         el('mic-transcript').textContent = `ถอดเสียงได้: “${finalTranscript}”`;
-        submitText(finalTranscript, { keepInput: true });
+        submitText(finalTranscript);
       }
     };
     recognition.onerror = (event) => {
@@ -590,7 +707,7 @@ function startListening() {
       if (incompleteTranscript) {
         if (partial) {
           el('mic-transcript').textContent = `ใช้คำที่ได้ยิน: “${partial}”`;
-          submitText(partial, { keepInput: true });
+          submitText(partial);
         } else {
           el('status').textContent = 'ไมค์หยุดฟังแต่ไม่ได้ข้อความเสียง ตรวจว่าเปิดด้วย Safari และเปิด Siri แล้วลองพูดอีกครั้ง';
         }
@@ -616,12 +733,27 @@ function startListening() {
 
 el('send-button').addEventListener('click', () => submitText());
 el('text-input').addEventListener('keydown', (event) => { if (event.key === 'Enter') submitText(); });
+el('text-input').addEventListener('input', () => {
+  if (el('video-coverage').hidden) return;
+  hideVideoCoverage();
+  el('status').textContent = 'กด “ค้นหา” เพื่อดูผลของข้อความใหม่';
+});
+el('video-edit-search').addEventListener('click', () => el('text-input').focus());
+el('video-play-partial').addEventListener('click', () => {
+  if (!pendingVideoResults) return;
+  const { matches, message } = pendingVideoResults;
+  hideVideoCoverage();
+  playVideoResults(matches, 0, message);
+});
 el('video-play-overlay').addEventListener('click', () => {
   const player = el('sign-video');
+  const playbackId = videoPlaybackId;
   player.play().then(() => {
+    if (playbackId !== videoPlaybackId) return;
     isPlaying = true;
     el('video-play-overlay').hidden = true;
   }).catch(() => {
+    if (playbackId !== videoPlaybackId) return;
     isPlaying = false;
     el('status').textContent = 'เล่นคลิปไม่ได้ ลองแตะปุ่มเล่นของวิดีโออีกครั้ง';
   });
@@ -718,6 +850,7 @@ document.querySelectorAll('.gesture-clip-expand').forEach((button) => {
 });
 window.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
+  if (!el('system-guide').hidden) { dismissGuide(); return; }
   const expandedFrame = document.querySelector('.gesture-clip-frame.expanded');
   if (!expandedFrame) return;
   expandedFrame.classList.remove('expanded');

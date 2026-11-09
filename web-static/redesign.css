@@ -105,3 +105,31 @@ body{background:#f4f8fc;background-image:radial-gradient(ellipse at 85% 0%,#e2ef
 .practice-test-results li[data-outcome="wrong"] { color: #925916; }
 .practice-test-results button { margin: 10px 0; }
 .practice-test-results .practice-note { font-size: 10px; }
+.video-layout {
+  grid-template-areas: 'player search' 'player voice';
+  grid-template-rows: auto 1fr;
+}
+.video-layout > .input-card { grid-area: search; }
+.video-layout > .player-card { grid-area: player; min-width: 0; scroll-margin-top: 12px; }
+.video-layout > .voice-card { grid-area: voice; }
+.video-coverage, .video-results-coverage {
+  padding: 12px;
+  border: 1px solid #f0d0a3;
+  border-radius: 12px;
+  background: #fff7e9;
+  color: #71440e;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.video-coverage { margin: 0 0 12px; }
+.video-coverage p { margin: 0 0 8px; }
+.video-coverage-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.video-results-coverage { margin: 0 0 10px; }
+@media (max-width: 820px) {
+  .video-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    grid-template-areas: 'search' 'player' 'voice';
+  }
+}
