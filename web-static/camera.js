@@ -18,7 +18,7 @@ let loopId = 0;
 let lastInferenceAt = 0;
 let lastVideoTime = -1;
 const state = {
-  meSince: 0, meLastValid: 0, meLatched: false, angryStage: 0, angrySince: 0, angryCooldownUntil: 0,
+  meSince: 0, meLastValid: 0, meLatched: false, angryTouch: null, angryCooldownUntil: 0,
   sickStage: 0, sickSince: 0, sickHoldSince: 0, sickLastValid: 0,
   fatherStage: 0, fatherSince: 0, fatherFistSince: 0,
   motherStage: 0, motherSince: 0, motherFistSince: 0,
@@ -31,8 +31,6 @@ const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmar
 const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 const ME_HOLD_MS = 1500;
 const ME_HOLD_SECONDS = (ME_HOLD_MS / 1000).toFixed(1);
-const ANGRY_TOUCH_THRESHOLD = 0.12;
-const ANGRY_PULL_THRESHOLD = 0.15;
 const ANGRY_TIMEOUT_MS = 2000;
 const ANGRY_COOLDOWN_MS = 1000;
 const SICK_TIMEOUT_MS = 2500;
@@ -80,7 +78,7 @@ function isFistY(points) { return [8, 12, 16, 20].every((tip) => points[tip].y >
 function distanceFromWrist(points, index) { return distance(points[index], points[0]); }
 function resetRecognitionState() {
   Object.assign(state, {
-    meSince: 0, meLastValid: 0, meLatched: false, angryStage: 0, angrySince: 0, angryCooldownUntil: 0,
+    meSince: 0, meLastValid: 0, meLatched: false, angryTouch: null, angryCooldownUntil: 0,
     sickStage: 0, sickSince: 0, sickHoldSince: 0, sickLastValid: 0,
     fatherStage: 0, fatherSince: 0, fatherFistSince: 0,
     motherStage: 0, motherSince: 0, motherFistSince: 0,
@@ -521,13 +519,13 @@ function detectMissSomeone(points, face, now) {
   const x = side * (tip.x - nose.x) / width, y = (tip.y - nose.y) / scale;
   const [index, middle, ring, pinky] = [8, 12, 16, 20].map((finger) => fingerBendAngle(points, finger));
   const singleIndex = index > 144 && middle < 106 && ring < 104 && pinky < 108;
-  const upright = singleIndex && x > .76 && x < 2.05 && y < -.70 && y > -1.65
+  const upright = singleIndex && x > .70 && x < 2.05 && y < -.70 && y > -2.02
     && base.y - tip.y > palm * .53;
   if (missSomeoneMotion.latched) {
     if (upright) return true;
     missSomeoneMotion.latched = false;
   }
-  const nearTemple = singleIndex && x > .12 && x < .79 && y > -.59 && y < .19
+  const nearTemple = singleIndex && x > .065 && x < .86 && y > -.89 && y < .19
     && side * (base.x - tip.x) * aspect > palm * .49 && base.y - tip.y < palm * .60;
   if (nearTemple) {
     missSomeoneMotion.start = { side, x, y, rawX: tip.x, rawY: tip.y, at: now };
@@ -816,32 +814,36 @@ function detectMe(points, face, now, arms) {
 }
 
 function detectAngry(hands, face, now) {
-  if (now < state.angryCooldownUntil) return false;
-  if (!hands.length || !face) {
-    state.angryStage = 0;
-    state.angrySince = 0;
-    return false;
-  }
+  if (now < state.angryCooldownUntil) return;
+  if (hands.length !== 1 || !face) { state.angryTouch = null; return; }
   const points = hands[0];
   const forehead = face[10];
-  const fingertipsTouching = [4, 8, 12, 16, 20].every((index) => distance(points[index], forehead) <= ANGRY_TOUCH_THRESHOLD);
-  const palmAway = distance(points[0], forehead) > ANGRY_TOUCH_THRESHOLD + 0.05;
-  const fingertipsCenter = { x: (points[8].x + points[12].x) / 2, y: (points[8].y + points[12].y) / 2 };
-  const pullDistance = distance(forehead, fingertipsCenter);
-  if (state.angryStage === 0) {
-    if (fingertipsTouching && palmAway) { state.angryStage = 1; state.angrySince = now; }
-    return fingertipsTouching && palmAway;
-  }
-  if (now - state.angrySince > ANGRY_TIMEOUT_MS) {
-    state.angryStage = 0;
-    state.angrySince = 0;
-  } else if (pullDistance > ANGRY_PULL_THRESHOLD) {
+  const scale = handMetricDistance(face[234], face[454]);
+  const palm = handMetricDistance(points[0], points[9]);
+  if (scale < .02 || palm < .015) { state.angryTouch = null; return; }
+  const index = points[8], middle = points[12];
+  // Keep the fingertips grouped through both phases. A raised index alone is a different sign.
+  const gathered = handMetricDistance(index, middle) < palm * .41
+    && handMetricDistance(index, points[16]) < palm * .69
+    && handMetricDistance(index, points[20]) < palm * .90;
+  if (!gathered) { state.angryTouch = null; return; }
+  const tips = { x: (index.x + middle.x) / 2, y: (index.y + middle.y) / 2 };
+  const offset = handMetricDistance(tips, forehead) / scale;
+  if (state.angryTouch && now - state.angryTouch.at > ANGRY_TIMEOUT_MS) state.angryTouch = null;
+  const touch = state.angryTouch;
+  if (touch && offset > .76 && offset - touch.offset > .43 && handMetricDistance(tips, touch.tips) > scale * .36) {
     announce('โกรธ', now, ANGRY_COOLDOWN_MS);
-    state.angryStage = 0;
-    state.angrySince = 0;
+    state.angryTouch = null;
     state.angryCooldownUntil = now + ANGRY_COOLDOWN_MS;
+    return;
   }
-  return state.angryStage === 1;
+  if ((!touch || offset < touch.offset) && offset < .56
+    && [8, 12, 16, 20].every((tip) => handMetricDistance(points[tip], forehead) < scale * .80)
+    && handMetricDistance(points[4], forehead) < scale * .92
+    && handMetricDistance(points[0], forehead) > scale * 1.05
+    && Math.min(fingerBendAngle(points, 8), fingerBendAngle(points, 12)) < 150) {
+    state.angryTouch = { offset, tips, at: now };
+  }
 }
 
 function detectSick(hands, handsResult, face, now) {
@@ -1058,7 +1060,8 @@ function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
     resetSingleHandState(); resetAddedSigns(); resetFullState();
   }
   if (!otherSignActive) { detectAngry(hands, face, now); detectSick(hands, handsResult, face, now); }
-  if (faceSignActive) { state.angryStage = 0; state.sickStage = 0; state.sickHoldSince = 0; }
+  if (otherSignActive) state.angryTouch = null;
+  if (faceSignActive) { state.sickStage = 0; state.sickHoldSince = 0; }
 
   const sosActive = !otherSignActive && detectHelpSOS(hands, now);
   if (otherSignActive) { state.sosStage = 0; state.sosHoldSince = 0; }
@@ -1118,7 +1121,7 @@ const practiceStepGuides = {
   'พ่อ': ['กางนิ้วตามคลิป วางนิ้วโป้งใกล้แก้ม', 'พบจังหวะเริ่มแล้ว · พับนิ้วเข้าหากันให้เป็นกำมือ', 'พบกำมือแล้ว · ค้างให้นิ่งสักครู่'],
   'แม่': ['ชูนิ้วชี้กับนิ้วโป้งตามคลิป วางนิ้วโป้งใกล้แก้ม', 'พบจังหวะเริ่มแล้ว · พับนิ้วชี้ลง', 'พบจังหวะพับนิ้วแล้ว · ค้างสักครู่'],
   'ลุง': ['ชูนิ้วชี้กับนิ้วโป้งเป็นรูป L ข้างขมับ', 'พบรูปมือแล้ว · ขยับมือไปกลับตามคลิปโดยคงรูป L'],
-  'โกรธ': ['รวมปลายนิ้วแตะบริเวณหน้าผากตามคลิป', 'พบจังหวะแตะแล้ว · ดึงมือออกจากหน้าผาก'],
+  'โกรธ': ['รวมปลายนิ้วให้ชิดกันแล้วแตะหน้าผากตามคลิป', 'พบจังหวะแตะแล้ว · ดึงมือออกจากหน้าผากโดยให้ปลายนิ้วยังชิดกัน'],
   'ร้องไห้': ['ชูนิ้วชี้กับนิ้วกลางเป็นรูป V ใกล้ตาตามคลิป', 'พบจังหวะเริ่มแล้ว · เลื่อนสองนิ้วลงตามแนวใบหน้า'],
   'ยิ้ม': ['วางปลายนิ้วทั้งสองมือใกล้กลางปากตามคลิป', 'พบจังหวะเริ่มแล้ว · แยกสองมือออกไปทางแก้ม', 'พบจังหวะแยกมือแล้ว · ค้างสักครู่'],
   'กลัว': ['ยกกำปั้นทั้งสองจากช่วงอกขึ้นมาใกล้ใต้คางตามคลิป', 'พบกำปั้นใกล้คางแล้ว · เก็บนิ้วโป้งแล้วค้างสักครู่'],
@@ -1142,7 +1145,7 @@ function currentPracticeStep(now) {
     case 'พ่อ': return state.fatherFistSince ? 2 : state.fatherStage ? 1 : 0;
     case 'แม่': return state.motherFistSince ? 2 : state.motherStage ? 1 : 0;
     case 'ลุง': return uncleMotion.samples.length ? 1 : 0;
-    case 'โกรธ': return state.angryStage ? 1 : 0;
+    case 'โกรธ': return state.angryTouch ? 1 : 0;
     case 'ร้องไห้': return cryMotion.start ? 1 : 0;
     case 'ยิ้ม': return smileMotion.finishSince ? 2 : smileMotion.start ? 1 : 0;
     case 'กลัว': return fearMotion.holdSince !== null ? 1 : 0;
