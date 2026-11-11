@@ -97,6 +97,10 @@ function resetRecognitionState() {
   resetFearMotion();
   resetDislikeMotion();
   resetSmileMotion();
+  for (const motion of [missSomeoneMotion, wantMotion, easyMotion]) {
+    motion.start = null;
+    motion.latched = false;
+  }
   resetHelloState();
   loveHold.latched = false; loveHold.lastValid = 0;
   sickHold.latched = false; sickHold.lastValid = 0;
@@ -499,6 +503,124 @@ function detectDislike(points, face, now) {
   return true;
 }
 
+const missSomeoneMotion = { start: null, latched: false };
+const wantMotion = { start: null, latched: false };
+const easyMotion = { start: null, latched: false };
+
+// An index finger points inward beside the temple before moving up and out.
+function detectMissSomeone(points, face, now) {
+  if (missSomeoneMotion.start && now - missSomeoneMotion.start.at > 1450) missSomeoneMotion.start = null;
+  if (!points || !face) { missSomeoneMotion.latched = false; return false; }
+  const aspect = frameCanvas.width / frameCanvas.height;
+  const nose = face[1], width = Math.abs(face[234].x - face[454].x), scale = width * aspect;
+  const wrist = points[0], tip = points[8], base = points[5];
+  const palm = handMetricDistance(wrist, points[9]);
+  if (width < .02 || palm < .015) return false;
+  const side = Math.sign(wrist.x - nose.x);
+  const x = side * (tip.x - nose.x) / width, y = (tip.y - nose.y) / scale;
+  const [index, middle, ring, pinky] = [8, 12, 16, 20].map((finger) => fingerBendAngle(points, finger));
+  const singleIndex = index > 144 && middle < 106 && ring < 104 && pinky < 108;
+  const upright = singleIndex && x > .76 && x < 2.05 && y < -.70 && y > -1.65
+    && base.y - tip.y > palm * .53;
+  if (missSomeoneMotion.latched) {
+    if (upright) return true;
+    missSomeoneMotion.latched = false;
+  }
+  const nearTemple = singleIndex && x > .12 && x < .79 && y > -.59 && y < .19
+    && side * (base.x - tip.x) * aspect > palm * .49 && base.y - tip.y < palm * .60;
+  if (nearTemple) {
+    missSomeoneMotion.start = { side, x, y, rawX: tip.x, rawY: tip.y, at: now };
+    return false;
+  }
+  const start = missSomeoneMotion.start;
+  if (!upright || !start || side !== start.side || x - start.x < .48 || start.y - y < .38
+    || side * (tip.x - start.rawX) < width * .29 || start.rawY - tip.y < scale * .25) return false;
+  missSomeoneMotion.start = null;
+  missSomeoneMotion.latched = announce('คิดถึง', now);
+  return true;
+}
+
+// The hand rises inward and curls the index and middle fingers at the chest.
+function detectWant(points, face, now) {
+  if (wantMotion.start && now - wantMotion.start.at > 1150) wantMotion.start = null;
+  if (!points || !face) { wantMotion.latched = false; return false; }
+  const aspect = frameCanvas.width / frameCanvas.height;
+  const chin = face[152], width = Math.abs(face[234].x - face[454].x), scale = width * aspect;
+  const wrist = points[0], palm = handMetricDistance(wrist, points[9]);
+  if (width < .02 || palm < .015) return false;
+  const side = Math.sign(wrist.x - chin.x);
+  const wristX = Math.abs(wrist.x - chin.x) / width;
+  const palmX = side * (points[9].x - chin.x) / width;
+  const palmY = (points[9].y - chin.y) / scale;
+  const inward = side * (wrist.x - points[8].x) * aspect > palm * .82;
+  const [index, middle, ring, pinky] = [8, 12, 16, 20].map((finger) => fingerBendAngle(points, finger));
+  const curling = inward && wristX > .24 && wristX < .97 && Math.abs(palmX) < .39 && palmY > .38 && palmY < 1.34
+    && index > 87 && index < 142 && middle > 96 && middle < 145 && ring > 136 && pinky > 121
+    && handMetricDistance(points[4], points[17]) < palm * .71
+    && handMetricDistance(points[8], points[5]) < palm * .65;
+  if (wantMotion.latched) {
+    if (curling) return true;
+    wantMotion.latched = false;
+  }
+  if (inward && wristX > .72 && wristX < 1.85 && palmY > .58 && palmY < 4.0
+    && index > 145 && middle > 143 && ring > 140 && pinky > 137) {
+    const start = wantMotion.start;
+    if (!start || side !== start.side || wristX > start.wristX) wantMotion.start = { side, wristX, palmX, at: now };
+  }
+  const start = wantMotion.start;
+  if (!curling || !start || side !== start.side || start.wristX - wristX < .23
+    || start.palmX - palmX < .15) return false;
+  wantMotion.start = null;
+  wantMotion.latched = announce('อยาก', now);
+  return true;
+}
+
+function overlappingHandDetection(hands, result) {
+  if (hands.length !== 2 || !handLabel(result, 0) || handLabel(result, 0) !== handLabel(result, 1)) return null;
+  const [first, second] = hands;
+  const palm = handMetricDistance(first[0], first[9]);
+  return handMetricDistance(first[0], second[0]) < palm * .6
+    && handMetricDistance(first[9], second[9]) < palm * .75 ? first : null;
+}
+
+// The little finger moves toward and away from the open hand on the opposite side.
+function detectEasy(hands, face, now) {
+  if (easyMotion.start && now - easyMotion.start.at > 1250) easyMotion.start = null;
+  if (hands.length !== 2 || !face) { easyMotion.latched = false; return false; }
+  const aspect = frameCanvas.width / frameCanvas.height;
+  const chin = face[152], width = Math.abs(face[234].x - face[454].x), scale = width * aspect;
+  if (width < .02) return false;
+  const angles = hands.map((hand) => [8, 12, 16, 20].map((finger) => fingerBendAngle(hand, finger)));
+  const flat = angles.findIndex((fingers) => fingers.every((angle) => angle > 144));
+  if (flat < 0) { easyMotion.latched = false; return false; }
+  const support = hands[flat], moving = hands[1 - flat];
+  const [index, middle, ring, pinky] = angles[1 - flat];
+  const side = Math.sign(support[0].x - chin.x);
+  const supportHeight = (support[9].y - chin.y) / scale;
+  const movingHeight = (moving[9].y - chin.y) / scale;
+  const gap = handMetricDistance(moving[20], support[9]) / scale;
+  const shape = index < 85 && middle < 81 && ring < 76 && pinky > 144
+    && side * (support[0].x - chin.x) > width * .44 && side * (moving[0].x - chin.x) < width * .11
+    && side * (support[12].x - support[0].x) > width * .48
+    && supportHeight > .04 && supportHeight < 1.24 && movingHeight > .04 && movingHeight < 1.27
+    && gap < 1.30 && gap < handMetricDistance(moving[8], support[9]) / scale * .85;
+  if (!shape) { easyMotion.latched = false; return false; }
+  if (easyMotion.latched) return true;
+  const relativeX = side * (moving[20].x - support[9].x) / width;
+  const start = easyMotion.start;
+  if (!start || start.side !== side) {
+    easyMotion.start = { side, gap, relativeX, pinkyX: moving[20].x, at: now };
+    return false;
+  }
+  const gapChange = gap - start.gap;
+  const towardSupport = relativeX - start.relativeX;
+  if (Math.min(gap, start.gap) > .69 || Math.abs(gapChange) < .075 || Math.abs(towardSupport) < .075
+    || gapChange * towardSupport >= 0 || Math.abs(moving[20].x - start.pinkyX) < width * .025) return false;
+  easyMotion.start = null;
+  easyMotion.latched = announce('ง่าย', now);
+  return true;
+}
+
 const smileMotion = { start: null, lastValid: 0, finishSince: 0, latched: false };
 
 function resetSmileMotion() {
@@ -874,12 +996,19 @@ function recognizeSigns(handsResult, faceResult, now, poseResult = null) {
   const previousPairActive = helloActive || wellActive || loveActive || smileActive;
   const fearActive = !previousPairActive && detectFear(hands, face, now);
   if (previousPairActive) { fearMotion.holdSince = null; fearMotion.latched = false; }
-  const bothHandsActive = previousPairActive || fearActive;
+  const easyActive = detectEasy(previousPairActive || fearActive ? [] : hands, face, now);
+  const bothHandsActive = previousPairActive || fearActive || easyActive;
   const singleHand = !bothHandsActive && hands.length === 1 ? hands[0] : null;
   const faceSignActive = detectFaceSigns(singleHand, face, now);
   if (faceSignActive || hands.length > 1) resetDislikeMotion();
   const dislikeActive = detectDislike(faceSignActive ? null : singleHand, face, now);
-  const otherSignActive = bothHandsActive || faceSignActive || dislikeActive;
+  const availableHand = faceSignActive || dislikeActive ? null : singleHand;
+  const missSomeoneActive = detectMissSomeone(availableHand, face, now);
+  // A single hand can briefly produce two overlapping landmarks as it rises.
+  const wantHand = bothHandsActive || faceSignActive || dislikeActive || missSomeoneActive
+    ? null : availableHand || overlappingHandDetection(hands, handsResult);
+  const wantActive = detectWant(wantHand, face, now);
+  const otherSignActive = bothHandsActive || faceSignActive || dislikeActive || missSomeoneActive || wantActive;
   if (helloActive || wellActive) { state.loveSince = 0; if (now - loveHold.lastValid > 600) loveHold.latched = false; }
   if (!otherSignActive && hands.length === 1 && face) {
     lastSingleAt = now;
@@ -964,6 +1093,9 @@ const practiceStepGuides = {
   'ยิ้ม': ['วางปลายนิ้วทั้งสองมือใกล้กลางปากตามคลิป', 'พบจังหวะเริ่มแล้ว · แยกสองมือออกไปทางแก้ม', 'พบจังหวะแยกมือแล้ว · ค้างสักครู่'],
   'กลัว': ['ยกกำปั้นทั้งสองจากช่วงอกขึ้นมาใกล้ใต้คางตามคลิป', 'พบกำปั้นใกล้คางแล้ว · เก็บนิ้วโป้งแล้วค้างสักครู่'],
   'ไม่ชอบ': ['ใช้นิ้วชี้ชี้เฉียงเข้าหากลางอกตามคลิป', 'พบจังหวะชี้แล้ว · ดึงมือกลับไปด้านเดิมเล็กน้อยพร้อมกางนิ้ว'],
+  'คิดถึง': ['ชี้นิ้วเข้าหาข้างขมับตามคลิป เก็บนิ้วที่เหลือ', 'พบจังหวะชี้แล้ว · ยกนิ้วชี้ขึ้นและออกด้านข้าง'],
+  'อยาก': ['เริ่มด้วยมือขวาแบที่ช่วงล่าง หันปลายนิ้วเข้าหาตัวตามคลิป', 'ยกมือเข้าหากลางอก แล้วงอนิ้วชี้กับนิ้วกลางเล็กน้อย'],
+  'ง่าย': ['แบมือหนึ่งออกด้านข้าง อีกมือเก็บนิ้วแล้วเหยียดนิ้วก้อยตามคลิป', 'ขยับนิ้วก้อยเข้าหามือที่แบแล้วขยับกลับ โดยคงรูปมือไว้'],
   'รัก': ['วางมือแบทั้งสองไขว้กันที่อกตามคลิป', 'พบมือไขว้ที่อกแล้ว · ค้างสักครู่'],
   'ไม่สบาย': ['วางหลังมือใกล้หน้าผากตามคลิป', 'พบจังหวะเริ่มแล้ว · ขยับหลังมือให้ชิดหน้าผาก', 'พบมือใกล้หน้าผากแล้ว · ค้างสักครู่'],
   'ช่วยฉันด้วย': ['กางมือให้นิ้วชิดกัน หันฝ่ามือเข้ากล้องตามคลิป', 'พบมือกางแล้ว · ค้างสักครู่', 'พบจังหวะเริ่มแล้ว · พับนิ้วโป้งเข้าฝ่ามือ', 'พบจังหวะพับนิ้วโป้งแล้ว · กำมือทับนิ้วโป้ง']
@@ -985,6 +1117,9 @@ function currentPracticeStep(now) {
     case 'ยิ้ม': return smileMotion.finishSince ? 2 : smileMotion.start ? 1 : 0;
     case 'กลัว': return fearMotion.holdSince !== null ? 1 : 0;
     case 'ไม่ชอบ': return dislikeMotion.start ? 1 : 0;
+    case 'คิดถึง': return missSomeoneMotion.start ? 1 : 0;
+    case 'อยาก': return wantMotion.start ? 1 : 0;
+    case 'ง่าย': return easyMotion.start ? 1 : 0;
     case 'รัก': return state.loveSince ? 1 : 0;
     case 'ไม่สบาย': return state.sickHoldSince ? 2 : state.sickStage ? 1 : 0;
     case 'ช่วยฉันด้วย': return state.sosStage ? state.sosStage + 1 : state.sosHoldSince ? 1 : 0;
