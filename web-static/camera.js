@@ -69,7 +69,7 @@ function handLabel(result, index) {
 }
 
 function updateCameraAspectRatio() {
-  if (camera.videoWidth && camera.videoHeight) {
+  if (camera.srcObject && camera.videoWidth && camera.videoHeight) {
     cameraWrap.style.aspectRatio = `${camera.videoWidth} / ${camera.videoHeight}`;
   }
 }
@@ -1278,7 +1278,10 @@ async function startCamera() {
   cameraWrap.dataset.cameraState = 'loading';
   framingState.pending = ''; framingState.shown = initialGuidance; framingState.since = 0;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', resizeMode: { ideal: 'none' } },
+      audio: false
+    });
     camera.srcObject = stream;
     await camera.play();
     updateCameraAspectRatio();
@@ -1292,6 +1295,8 @@ async function startCamera() {
     loopId = requestAnimationFrame(inferFrame);
   } catch (error) {
     stream?.getTracks().forEach((track) => track.stop()); stream = null;
+    camera.srcObject = null;
+    cameraWrap.style.removeProperty('aspect-ratio');
     startButton.disabled = false;
     badge.textContent = 'เปิดกล้องไม่ได้';
     cameraWrap.dataset.cameraState = 'error';
@@ -1309,7 +1314,7 @@ function stopCamera() {
   cancelAnimationFrame(loopId);
   stream?.getTracks().forEach((track) => track.stop()); stream = null;
   camera.srcObject = null; placeholder.hidden = false; placeholder.textContent = 'แตะ “เปิดกล้อง” เพื่อเริ่มแปล';
-  cameraWrap.style.aspectRatio = '4 / 3';
+  cameraWrap.style.removeProperty('aspect-ratio');
   startButton.hidden = false; startButton.disabled = false; stopButton.hidden = true; badge.textContent = 'ปิดกล้อง';
   resetRecognitionState();
   lastPoseResult = null; lastPoseAt = -Infinity;
@@ -1325,6 +1330,7 @@ document.getElementById('camera-setup-confirm').addEventListener('click', () => 
 });
 stopButton.addEventListener('click', stopCamera);
 camera.addEventListener('loadedmetadata', updateCameraAspectRatio);
+camera.addEventListener('resize', updateCameraAspectRatio);
 window.addEventListener('system-view-changed', (event) => {
   if (event.detail?.systemId !== 'gesture-system' && stream) stopCamera();
 });

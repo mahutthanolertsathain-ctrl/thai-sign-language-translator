@@ -406,6 +406,9 @@ body{background:#f4f8fc;background-image:radial-gradient(ellipse at 85% 0%,#e2ef
   .site-intro-credit::after { margin-top: 14px; }
   .site-intro-static .site-intro-content { gap: 15px; }
 }
+@media (orientation: portrait) {
+  .gesture-layout .camera-wrap { max-height: none; }
+}
 .camera-before-tip {
   margin: 12px 0 0;
   color: #254b70;
