@@ -163,8 +163,11 @@ if (selectedDevice) {
   el('main-content').inert = false;
 } else {
   document.body.classList.add('welcome-open');
-  el('welcome-next').focus();
 }
+const siteIntro = el('site-intro');
+if (siteIntro.open) {
+  siteIntro.addEventListener('close', () => el(selectedDevice ? 'home-title' : 'welcome-next').focus({ preventScroll: true }), { once: true });
+} else if (!selectedDevice) el('welcome-next').focus();
 function dismissGuide() {
   closeGuide();
   pendingPractice = false;

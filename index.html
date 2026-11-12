@@ -12,6 +12,33 @@
   <link rel="stylesheet" href="/web-static/redesign.css">
 </head>
 <body class="home-view">
+  <dialog id="site-intro" class="site-intro" aria-labelledby="site-intro-name" aria-describedby="site-intro-thai site-intro-credit">
+    <div class="site-intro-content">
+      <h1 id="site-intro-name" class="site-intro-name" lang="en">muepood</h1>
+      <p id="site-intro-thai" class="site-intro-thai">มือพูด</p>
+      <p id="site-intro-credit" class="site-intro-credit" lang="en">Developed by <strong>Mahatthano Lertsathian</strong></p>
+    </div>
+    <button id="site-intro-skip" class="site-intro-skip" type="button" autofocus>ข้ามฉากเปิด</button>
+  </dialog>
+  <script>
+    (() => {
+      const intro = document.getElementById('site-intro');
+      if (typeof intro.showModal !== 'function') return;
+      try {
+        if (sessionStorage.getItem('muepood-intro-seen')) return;
+      } catch (_) {}
+
+      let reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      try { reduceMotion ||= localStorage.getItem('muepood-reduced-motion') === 'true'; } catch (_) {}
+      intro.classList.toggle('site-intro-static', reduceMotion);
+      intro.showModal();
+      try { sessionStorage.setItem('muepood-intro-seen', 'true'); } catch (_) {}
+
+      const timer = window.setTimeout(() => intro.close(), reduceMotion ? 1800 : 3300);
+      intro.addEventListener('close', () => window.clearTimeout(timer), { once: true });
+      document.getElementById('site-intro-skip').addEventListener('click', () => intro.close());
+    })();
+  </script>
   <div id="welcome-gate" class="welcome-gate" role="dialog" aria-modal="true" aria-labelledby="welcome-title" aria-describedby="welcome-message">
     <section class="welcome-card">
       <div id="welcome-step-1" class="welcome-step">
