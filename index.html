@@ -7,44 +7,33 @@
   <title>เว็บไซต์แปลภาษามือแบบสองทิศทาง</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/web-static/styles.css">
   <link rel="stylesheet" href="/web-static/redesign.css">
 </head>
 <body class="home-view">
-  <dialog id="site-intro" class="site-intro" aria-labelledby="site-intro-name" aria-describedby="site-intro-thai site-intro-credit">
-    <div class="site-intro-content">
-      <div class="site-intro-brand">
-        <h1 id="site-intro-name" class="site-intro-name" lang="en" tabindex="-1" autofocus>muepood</h1>
-        <p id="site-intro-thai" class="site-intro-thai">มือพูด</p>
+  <dialog id="site-intro" class="site-intro" aria-labelledby="site-intro-name" aria-describedby="site-intro-thai site-intro-description site-intro-credit">
+    <div class="site-intro-scene">
+      <div class="site-intro-ambient site-intro-ambient-teal" aria-hidden="true"></div>
+      <div class="site-intro-ambient site-intro-ambient-blue" aria-hidden="true"></div>
+      <div class="site-intro-light" aria-hidden="true"></div>
+      <div class="site-intro-content">
+        <div class="site-intro-brand">
+          <h1 id="site-intro-name" class="site-intro-name" lang="en" tabindex="-1" autofocus>muepood</h1>
+          <p id="site-intro-thai" class="site-intro-thai">มือพูด</p>
+          <p id="site-intro-description" class="site-intro-description">แปลภาษามือไทยสองทิศทาง</p>
+        </div>
+        <p id="site-intro-credit" class="site-intro-credit" lang="en">
+          <span class="site-intro-credit-label">Developed by</span>
+          <strong><span>Mahatthano</span> <span>Lertsathian</span></strong>
+        </p>
       </div>
-      <p id="site-intro-credit" class="site-intro-credit" lang="en"><span>Developed by</span> <strong>Mahatthano Lertsathian</strong></p>
     </div>
+    <picture class="site-intro-hand" aria-hidden="true">
+      <source media="(max-width: 560px)" srcset="/web-static/intro/hand-narrow.svg" width="57" height="57">
+      <img src="/web-static/intro/hand-wide.svg" width="76" height="76" alt="">
+    </picture>
   </dialog>
-  <script>
-    (() => {
-      const intro = document.getElementById('site-intro');
-      if (typeof intro.showModal !== 'function') return;
-      try {
-        if (sessionStorage.getItem('muepood-intro-seen')) return;
-      } catch (_) {}
-
-      let reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      try { reduceMotion ||= localStorage.getItem('muepood-reduced-motion') === 'true'; } catch (_) {}
-      const duration = reduceMotion ? 1800 : 4250;
-      intro.classList.toggle('site-intro-static', reduceMotion);
-      intro.style.setProperty('--site-intro-duration', `${duration}ms`);
-      intro.showModal();
-      document.documentElement.classList.add('site-intro-open');
-      try { sessionStorage.setItem('muepood-intro-seen', 'true'); } catch (_) {}
-
-      const timer = window.setTimeout(() => intro.close(), duration);
-      intro.addEventListener('close', () => {
-        window.clearTimeout(timer);
-        document.documentElement.classList.remove('site-intro-open');
-      }, { once: true });
-    })();
-  </script>
   <div id="welcome-gate" class="welcome-gate" role="dialog" aria-modal="true" aria-labelledby="welcome-title" aria-describedby="welcome-message">
     <section class="welcome-card">
       <div id="welcome-step-1" class="welcome-step">
@@ -220,7 +209,20 @@
             <p class="note">หลังตรวจพบท่าล่าสุด ระบบรอประมาณ 2.25 วินาทีก่อนพูด เพื่อให้มีเวลาต่อคำเป็นประโยค</p>
           </article>
     </section>
-    <footer><span class="footer-brand">มือพูด · MUEPOOD</span><span>ต้นแบบเพื่อเรียนรู้และพัฒนาการสื่อสารร่วมกัน</span><br>สำหรับโทรศัพท์และแท็บเล็ต ให้เปิดผ่าน HTTPS และอนุญาตไมโครโฟนเมื่อเบราว์เซอร์ถาม</footer>
+    <footer class="site-footer">
+      <div class="site-footer-about">
+        <p class="site-footer-brand">มือพูด · <span lang="en">muepood</span></p>
+        <p>เว็บไซต์แปลภาษามือไทยสองทิศทาง</p>
+        <p>ต้นแบบเพื่อเรียนรู้และพัฒนาการสื่อสารร่วมกัน</p>
+      </div>
+      <div class="site-footer-credit">
+        <p class="site-footer-credit-label" lang="en">Developed by</p>
+        <p class="site-footer-name" lang="en"><strong>Mahatthano Lertsathian</strong></p>
+        <p>ออกแบบและพัฒนาเว็บไซต์</p>
+        <a class="site-footer-link" href="https://github.com/mahutthanolertsathain-ctrl/thai-sign-language-translator" target="_blank" rel="noopener">ดูโครงงานบน GitHub <span aria-hidden="true">↗</span></a>
+      </div>
+      <p class="site-footer-note">สำหรับโทรศัพท์และแท็บเล็ต ให้เปิดผ่าน HTTPS และอนุญาตไมโครโฟนเมื่อเบราว์เซอร์ถาม</p>
+    </footer>
   </main>
   <dialog id="camera-setup-dialog" class="camera-setup-dialog" aria-labelledby="camera-setup-title" aria-describedby="camera-setup-message">
     <div class="camera-setup-content">
@@ -239,6 +241,43 @@
     </div>
     <div class="welcome-actions"><button id="camera-setup-cancel" class="secondary" type="button">กลับไปก่อน</button><button id="camera-setup-confirm" class="primary" type="button">พร้อมแล้ว เปิดกล้อง</button></div>
   </dialog>
+  <script>
+    (() => {
+      const intro = document.getElementById('site-intro');
+      if (typeof intro.showModal !== 'function') return;
+      try {
+        if (sessionStorage.getItem('muepood-intro-seen')) return;
+      } catch (_) {}
+
+      let reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      try { reduceMotion ||= localStorage.getItem('muepood-reduced-motion') === 'true'; } catch (_) {}
+      const duration = reduceMotion ? 1800 : 4200;
+      intro.classList.toggle('site-intro-static', reduceMotion);
+      intro.style.setProperty('--site-intro-duration', `${duration}ms`);
+      document.documentElement.classList.add('site-intro-open');
+
+      const logo = document.querySelector('#brand-home .brand-symbol');
+      const alignHandToLogo = () => {
+        const bounds = logo.getBoundingClientRect();
+        intro.style.setProperty('--site-intro-logo-x', `${bounds.left + bounds.width / 2}px`);
+        intro.style.setProperty('--site-intro-logo-y', `${bounds.top + bounds.height / 2}px`);
+      };
+      if (!reduceMotion) {
+        alignHandToLogo();
+        window.addEventListener('resize', alignHandToLogo);
+      }
+
+      intro.showModal();
+      try { sessionStorage.setItem('muepood-intro-seen', 'true'); } catch (_) {}
+
+      const timer = window.setTimeout(() => intro.close(), duration);
+      intro.addEventListener('close', () => {
+        window.clearTimeout(timer);
+        window.removeEventListener('resize', alignHandToLogo);
+        document.documentElement.classList.remove('site-intro-open');
+      }, { once: true });
+    })();
+  </script>
   <script src="/web-static/app.js" defer></script>
   <script type="module" src="/web-static/camera.js"></script>
 </body>

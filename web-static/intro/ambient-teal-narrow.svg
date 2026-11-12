@@ -1,0 +1,9 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="460.2" height="683.64" viewBox="0 0 460.2 683.64" fill="none" xmlns="http://www.w3.org/2000/svg">
+<ellipse id="Teal ambient light" cx="230.1" cy="341.82" rx="230.1" ry="341.82" fill="url(#paint0_radial_0_14)"/>
+<defs>
+<radialGradient id="paint0_radial_0_14" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(230.1 341.82) scale(460.2 683.64)">
+<stop stop-color="#0D6670" stop-opacity="0.4"/>
+<stop offset="1" stop-color="#0D6670" stop-opacity="0"/>
+</radialGradient>
+</defs>
+</svg>
